@@ -49,7 +49,7 @@ v0.4
 * nfqws2: proper conntack position for replayed packets
 * nfqws2: execution_plan, execution_plan_cancel
 * blockcheck2: fix broken dns cache
-* nfqws2: LUA_COMPAT_VER tracking
+* nfqws2: Lua_COMPAT_VER tracking
 
 v0.5
 
@@ -57,7 +57,7 @@ v0.5
 * nfqws2: abandon any arithmetics beyond 32bit (because lua 5.1 does not support 64 bit integers, store everything as double)
 * nfqws2: fix issues with 32-bit lua_Integer in lua<5.3 on 32-bit platforms
 * nfqws2: instance_cutoff luacall just warns and do nothing if ctx is nil
-* actions: build nfqws2 x86 binary with LUA 5.4, not with luajit
+* actions: build nfqws2 x86 binary with Lua 5.4, not with luajit
 * zapret-lib: http_reply, url and nld dissectors
 * zapret-lib: instance_cutoff_shim
 * zapret-auto: circular orchestrator
@@ -119,7 +119,7 @@ v0.7.5
 
 * zapret-auto: orchestrator "repeater"
 * blockcheck2: check http3 with ipv6 exthdr
-* github actions: separate target arm-old with LUA classic, not JIT
+* github actions: separate target arm-old with Lua classic, not JIT
 * zapret-auto: iff/neg in repeater
 * zapret-antidpi: multidisorder_legacy
 * ipset: remove get_reestr_hostlist.sh and get_reestr_resolve.sh because zapret-info does not and will probably not ever update

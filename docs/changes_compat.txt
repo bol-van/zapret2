@@ -3,7 +3,7 @@ When something changes capable of breaking things NFQWS2_COMPAT_VER increases.
 
 v2
 * removed "stun_binding_req" specialized payload. replaced with common "stun" - any stun packets, not only binding request.
-every LUA relying on desync.l7payload should be revised.
+every Lua relying on desync.l7payload should be revised.
 nfqws2 --payload option and init.d custom scripts must be updated.
 
 v3
