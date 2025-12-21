@@ -49,7 +49,7 @@ v0.4
 * nfqws2: proper conntack position for replayed packets
 * nfqws2: execution_plan, execution_plan_cancel
 * blockcheck2: fix broken dns cache
-* nfqws2: Lua_COMPAT_VER tracking
+* nfqws2: LUA_COMPAT_VER tracking
 
 v0.5
 
