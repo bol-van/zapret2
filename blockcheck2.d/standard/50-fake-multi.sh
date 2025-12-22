@@ -22,7 +22,7 @@ pktws_check_http()
 	# do not test fake + multisplit if multisplit works
 	[ "$need_multisplit" = 0 -a "$SCANLEVEL" != force ] || splitfs=multisplit
 	# do not test fake + multidisorder if multidisorder works
-	[ "$need_multidisorder" = 0 -a "$SCANLEVEL" != force ] || splitfs="${splitfs:+$splitfs }multidisorder"
+	[ "$need_multidisorder" = 0 -a "$SCANLEVEL" != force ] || splitfs="${splitfs:+$splitfs }$MULTIDISORDER"
 
 	for splitf in $splitfs; do
 		ok=0
@@ -112,7 +112,7 @@ pktws_check_https_tls()
 	# do not test fake + multisplit if multisplit works
 	[ "$need_multisplit" = 0 -a "$SCANLEVEL" != force ] || splitfs=multisplit
 	# do not test fake + multidisorder if multidisorder works
-	[ "$need_multidisorder" = 0 -a "$SCANLEVEL" != force ] || splitfs="${splitfs:+$splitfs }multidisorder"
+	[ "$need_multidisorder" = 0 -a "$SCANLEVEL" != force ] || splitfs="${splitfs:+$splitfs }$MULTIDISORDER"
 
 	ok_any=0
 	for splitf in $splitfs; do

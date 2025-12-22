@@ -7,7 +7,7 @@ pktws_check_http()
 
 	local PAYLOAD="--payload http_req" split
 
-	for split in '' multisplit multidisorder; do
+	for split in '' multisplit $MULTIDISORDER; do
 		pktws_curl_test_update "$1" "$2" --lua-desync=syndata ${split:+$PAYLOAD --lua-desync=$split}
 		pktws_curl_test_update "$1" "$2" --lua-desync=syndata:blob=fake_default_http $PAYLOAD ${split:+$PAYLOAD --lua-desync=$split}
 	done
@@ -21,7 +21,7 @@ pktws_check_https_tls()
 
 	local PAYLOAD="--payload tls_client_hello" ok=0 pre="$3" split
 
-	for split in '' multisplit multidisorder; do
+	for split in '' multisplit $MULTIDISORDER; do
 		pktws_curl_test_update "$1" "$2" $pre --lua-desync=syndata ${split:+$PAYLOAD --lua-desync=$split} && ok=1
 		pktws_curl_test_update "$1" "$2" $pre --lua-desync=syndata:blob=0x1603 ${split:+$PAYLOAD --lua-desync=$split} && ok=1
 		pktws_curl_test_update "$1" "$2" $pre --lua-desync=syndata:blob=fake_default_tls:tls_mod=rnd,dupsid,rndsni ${split:+$PAYLOAD --lua-desync=$split} && ok=1

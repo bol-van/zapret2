@@ -24,8 +24,8 @@ pktws_check_http()
 	for split in 'method+1 method+2' 'midsld-1 midsld' 'method+1 method+2,midsld'; do
 		f="$(extract_arg 1 $split)"
 		f2="$(extract_arg 2 $split)"
-		pktws_curl_test_update $1 $2 $PAYLOAD --lua-desync=multidisorder:pos=$f2:seqovl=$f
-		pktws_curl_test_update $1 $2 ${SEQOVL_PATTERN_HTTP:+--blob=$pat:@"$SEQOVL_PATTERN_HTTP" }$PAYLOAD --lua-desync=multidisorder:pos=$f2:seqovl=$f:seqovl_pattern=$pat
+		pktws_curl_test_update $1 $2 $PAYLOAD --lua-desync=$MULTIDISORDER:pos=$f2:seqovl=$f
+		pktws_curl_test_update $1 $2 ${SEQOVL_PATTERN_HTTP:+--blob=$pat:@"$SEQOVL_PATTERN_HTTP" }$PAYLOAD --lua-desync=$MULTIDISORDER:pos=$f2:seqovl=$f:seqovl_pattern=$pat
 	done
 }
 
@@ -60,8 +60,8 @@ pktws_seqovl_tests_tls()
 	for split in '1 2' 'sniext sniext+1' 'sniext+3 sniext+4' 'midsld-1 midsld' '1 2,midsld'; do
 		f="$(extract_arg 1 $split)"
 		f2="$(extract_arg 2 $split)"
-		pktws_curl_test_update $1 $2 $PAYLOAD --lua-desync=multidisorder:pos=$f2:seqovl=$f && ok=1
-		pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$rnd_mod $pre $PAYLOAD --lua-desync=multidisorder:pos=$f2:seqovl=$f:seqovl_pattern=$pat && ok=1
+		pktws_curl_test_update $1 $2 $PAYLOAD --lua-desync=$MULTIDISORDER:pos=$f2:seqovl=$f && ok=1
+		pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$rnd_mod $pre $PAYLOAD --lua-desync=$MULTIDISORDER:pos=$f2:seqovl=$f:seqovl_pattern=$pat && ok=1
 	done
 	[ "$ok" = 1 ] && ok_any=1
 	[ "$ok_any" = 1 ]

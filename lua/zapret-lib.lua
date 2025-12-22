@@ -1300,7 +1300,7 @@ function wsize_rewrite(dis, arg)
 	local b = false
 	if arg.wsize then
 		local wsize = tonumber(arg.wsize)
-		DLOG("window size "..dis.tcp.th_win.." => "..wsize)
+		DLOG("wsize_rewrite: window size "..dis.tcp.th_win.." => "..wsize)
 		dis.tcp.th_win = tonumber(arg.wsize)
 		b = true
 	end
@@ -1310,9 +1310,9 @@ function wsize_rewrite(dis, arg)
 		if i then
 			local oldscale = u8(dis.tcp.options[i].data)
 			if scale>oldscale then
-				DLOG("not increasing scale factor")
+				DLOG("wsize_rewrite: not increasing scale factor")
 			elseif scale<oldscale then
-				DLOG("scale factor "..oldscale.." => "..scale)
+				DLOG("wsize_rewrite: scale factor "..oldscale.." => "..scale)
 				dis.tcp.options[i].data = bu8(scale)
 				b = true
 			end

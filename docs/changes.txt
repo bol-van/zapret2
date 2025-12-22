@@ -124,3 +124,4 @@ v0.7.5
 * zapret-antidpi: multidisorder_legacy
 * ipset: remove get_reestr_hostlist.sh and get_reestr_resolve.sh because zapret-info does not and will probably not ever update
 * nfqws2: fix "reasm cancelled" if no incoming traffic redirected
+* blockcheck2: MULTIDISORDER=multidisorder_legacy

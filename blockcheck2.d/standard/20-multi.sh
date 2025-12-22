@@ -5,10 +5,10 @@ pktws_simple_split_tests()
 	# $3 - splits
 	# $4 - PRE args for nfqws2
 	local pos ok ok_any pre="$4"
-	local splitf splitfs="multisplit multidisorder"
+	local splitf splitfs="multisplit $MULTIDISORDER"
 
 	ok_any=0
-	for splitf in multisplit multidisorder; do
+	for splitf in $splitfs; do
 		eval need_$splitf=0
 		ok=0
 		for pos in $3; do
