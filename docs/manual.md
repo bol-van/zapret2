@@ -3,7 +3,6 @@
 # Содержание:
 
 <details>
-	
 	<summary>Развернуть</summary>
 	
 ***
