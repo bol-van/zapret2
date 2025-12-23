@@ -162,6 +162,8 @@ struct dissect
 	size_t len_payload;
 };
 void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis);
+void reverse_ip(struct ip *ip, struct ip6_hdr *ip6);
+void reverse_tcp(struct tcphdr *tcp);
 
 uint8_t ttl46(const struct ip *ip, const struct ip6_hdr *ip6);
 

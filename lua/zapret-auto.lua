@@ -135,6 +135,7 @@ end
 --   udp too much out with too few in
 -- arg: maxseq=<rseq> - tcp: test retransmissions only within this relative sequence. default is 32K
 -- arg: retrans=N - tcp: retrans count threshold. default is 3
+-- arg: reset - send RST to retransmitter to break long wait
 -- arg: inseq=<rseq> - tcp: maximum relative sequence number to treat incoming RST as DPI reset. default is 4K
 -- arg: no_http_redirect - tcp: disable http_reply dpi redirect trigger
 -- arg: no_rst - tcp: disable incoming RST trigger
@@ -151,6 +152,19 @@ function standard_failure_detector(desync, crec)
 					crec.retrans = crec.retrans and (crec.retrans+1) or 1
 					DLOG("standard_failure_detector: retransmission "..crec.retrans.."/"..arg.retrans)
 					trigger = crec.retrans>=arg.retrans
+					if trigger and desync.arg.reset then
+						local dis = deepcopy(desync.dis)
+						dis.payload = nil
+						dis_reverse(dis)
+						dis.tcp.th_flags = TH_RST
+						dis.tcp.th_win = desync.track and desync.track.pos.reverse.tcp.winsize or 64
+						dis.tcp.options = {}
+						if dis.ip6 then
+							dis.ip6.ip6_flow = desync.track.pos.reverse.ip6_flow
+						end
+						DLOG("standard_failure_detector: sending RST to retransmitter")
+						rawsend_dissect(dis)
+					end
 				end
 			end
 		else

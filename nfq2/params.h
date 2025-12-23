@@ -84,6 +84,7 @@ struct desync_profile
 	int hostlist_auto_fail_threshold, hostlist_auto_fail_time, hostlist_auto_retrans_threshold;
 	int hostlist_auto_udp_in, hostlist_auto_udp_out;
 	uint32_t hostlist_auto_retrans_maxseq, hostlist_auto_incoming_maxseq;
+	bool hostlist_auto_retrans_reset;
 
 	hostfail_pool *hostlist_auto_fail_counters;
 

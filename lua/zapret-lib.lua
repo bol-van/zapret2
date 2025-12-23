@@ -762,6 +762,22 @@ function fix_ip6_next(ip6, last_proto)
 	end
 end
 
+-- reverses ip addresses, ports and seq/ack
+function dis_reverse(dis)
+	if dis.ip then
+		dis.ip.ip_src, dis.ip.ip_dst = dis.ip.ip_dst, dis.ip.ip_src
+	end
+	if dis.ip6 then
+		dis.ip6.ip6_src, dis.ip6.ip6_dst = dis.ip6.ip6_dst, dis.ip6.ip6_src
+	end
+	if dis.tcp then
+		dis.tcp.th_sport, dis.tcp.th_dport = dis.tcp.th_dport, dis.tcp.th_sport
+		dis.tcp.th_ack, dis.tcp.th_seq = dis.tcp.th_seq, dis.tcp.th_ack
+	end
+	if dis.udp then
+		dis.udp.uh_sport, dis.udp.uh_dport = dis.udp.uh_dport, dis.udp.uh_sport
+	end
+end
 
 -- parse autottl : delta,min-max
 function parse_autottl(s)

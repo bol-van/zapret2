@@ -1436,6 +1436,7 @@ static void exithelp(void)
 		" --hostlist-auto-fail-time=<int>\t\t\t; all failed attemps must be within these seconds (default : %d)\n"
 		" --hostlist-auto-retrans-threshold=<int>\t\t; how many request retransmissions cause attempt to fail (default : %d)\n"
 		" --hostlist-auto-retrans-maxseq=<int>\t\t\t; count retransmissions only within this relative sequence (default : %u)\n"
+		" --hostlist-auto-retrans-reset=[0|1]\t\t\t; send RST to retransmitter to break long wait (default: 1)\n"
 		" --hostlist-auto-incoming-maxseq=<int>\t\t\t; treat tcp connection as successful if incoming relative sequence exceedes this threshold (default : %u)\n"
 		" --hostlist-auto-udp-out=<int>\t\t\t\t; udp failure condition : sent at least `udp_out` packets (default : %u)\n"
 		" --hostlist-auto-udp-in=<int>\t\t\t\t; udp failure condition : received not more than `udp_in` packets (default : %u)\n"
@@ -1554,6 +1555,7 @@ enum opt_indices {
 	IDX_HOSTLIST_AUTO_FAIL_TIME,
 	IDX_HOSTLIST_AUTO_RETRANS_THRESHOLD,
 	IDX_HOSTLIST_AUTO_RETRANS_MAXSEQ,
+	IDX_HOSTLIST_AUTO_RETRANS_RESET,
 	IDX_HOSTLIST_AUTO_INCOMING_MAXSEQ,
 	IDX_HOSTLIST_AUTO_UDP_IN,
 	IDX_HOSTLIST_AUTO_UDP_OUT,
@@ -1642,6 +1644,7 @@ static const struct option long_options[] = {
 	[IDX_HOSTLIST_AUTO_FAIL_TIME] = {"hostlist-auto-fail-time", required_argument, 0, 0},
 	[IDX_HOSTLIST_AUTO_RETRANS_THRESHOLD] = {"hostlist-auto-retrans-threshold", required_argument, 0, 0},
 	[IDX_HOSTLIST_AUTO_RETRANS_MAXSEQ] = {"hostlist-auto-retrans-maxseq", required_argument, 0, 0},
+	[IDX_HOSTLIST_AUTO_RETRANS_RESET] = {"hostlist-auto-retrans-reset", optional_argument, 0, 0},
 	[IDX_HOSTLIST_AUTO_INCOMING_MAXSEQ] = {"hostlist-auto-incoming-maxseq", required_argument, 0, 0},
 	[IDX_HOSTLIST_AUTO_UDP_IN] = {"hostlist-auto-udp-in", required_argument, 0, 0},
 	[IDX_HOSTLIST_AUTO_UDP_OUT] = {"hostlist-auto-udp-out", required_argument, 0, 0},
@@ -2099,6 +2102,9 @@ int main(int argc, char **argv)
 			break;
 		case IDX_HOSTLIST_AUTO_INCOMING_MAXSEQ:
 			dp->hostlist_auto_incoming_maxseq = (uint32_t)atoi(optarg);
+			break;
+		case IDX_HOSTLIST_AUTO_RETRANS_RESET:
+			dp->hostlist_auto_retrans_reset = !optarg || !!atoi(optarg);
 			break;
 		case IDX_HOSTLIST_AUTO_UDP_OUT:
 			dp->hostlist_auto_udp_out = atoi(optarg);

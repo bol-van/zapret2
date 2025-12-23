@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <time.h>
 
 #define CTRACK_T_SYN	60
@@ -17,6 +18,7 @@ typedef struct
 	uint64_t pcounter;	// packet counter
 	uint64_t pdcounter;	// data packet counter (with payload)
 	uint64_t pbcounter;	// transferred byte counter. includes retransmissions. it's not the same as relative seq.
+	uint32_t ip6flow;
 
 	// tcp only state, not used in udp
 	uint32_t pos;		// TCP: seq_last+payload, ack_last+payload  UDP: sum of all seen payload lenghts including current

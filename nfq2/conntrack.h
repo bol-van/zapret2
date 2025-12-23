@@ -19,6 +19,7 @@
 #include "conntrack_base.h"
 #include "packet_queue.h"
 #include "protocol.h"
+#include "darkmagic.h"
 
 //#define HASH_BLOOM 20
 #define HASH_NONFATAL_OOM 1
@@ -100,11 +101,11 @@ typedef struct
 
 void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_syn, uint32_t timeout_established, uint32_t timeout_fin, uint32_t timeout_udp);
 void ConntrackPoolDestroy(t_conntrack *p);
-bool ConntrackPoolFeed(t_conntrack *p, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr, size_t len_payload, t_ctrack **ctrack, bool *bReverse);
+bool ConntrackPoolFeed(t_conntrack *p, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse);
 // do not create, do not update. only find existing
-bool ConntrackPoolDoubleSearch(t_conntrack *p, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr, t_ctrack **ctrack, bool *bReverse);
-bool ConntrackPoolDrop(t_conntrack *p, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr);
-void CaonntrackExtractConn(t_conn *c, bool bReverse, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr);
+bool ConntrackPoolDoubleSearch(t_conntrack *p, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse);
+bool ConntrackPoolDrop(t_conntrack *p, const struct dissect *dis);
+void ConntrackExtractConn(t_conn *c, bool bReverse, const struct dissect *dis);
 void ConntrackPoolDump(const t_conntrack *p);
 void ConntrackPoolPurge(t_conntrack *p);
 void ConntrackClearHostname(t_ctrack *track);

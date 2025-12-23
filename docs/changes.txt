@@ -130,3 +130,5 @@ v0.7.6
 
 * nfqws2: reevaluate profile on l7/host discovery in any direction
 * nfqws2: dtls protocol detection
+* nfqws2: autohostlist reset retransmitter to break long wait
+* zapret-auto: stadard_failure_detector reset retransmitter to break long wait

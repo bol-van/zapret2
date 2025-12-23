@@ -246,11 +246,13 @@ static bool is_retransmission(const t_ctrack_position *pos)
 }
 
 // return true if retrans trigger fires
-static bool auto_hostlist_retrans(t_ctrack *ctrack, uint8_t l4proto, int threshold, const char *client_ip_port, t_l7proto l7proto)
+static bool auto_hostlist_retrans
+ (t_ctrack *ctrack, const struct dissect *dis, int threshold, const char *client_ip_port, t_l7proto l7proto,
+	const struct sockaddr *client, const char *ifclient)
 {
 	if (ctrack && ctrack->dp && ctrack->hostname_ah_check && !ctrack->failure_detect_finalized && ctrack->req_retrans_counter != RETRANS_COUNTER_STOP)
 	{
-		if (l4proto == IPPROTO_TCP && ctrack->pos.state!=SYN)
+		if (dis->proto == IPPROTO_TCP && ctrack->pos.state!=SYN)
 		{
 			if (!seq_within(ctrack->pos.client.seq_last, ctrack->pos.client.seq0, ctrack->pos.client.seq0 + ctrack->dp->hostlist_auto_retrans_maxseq))
 			{
@@ -269,6 +271,46 @@ static bool auto_hostlist_retrans(t_ctrack *ctrack, uint8_t l4proto, int thresho
 			DLOG("retrans threshold reached : %u/%u\n", ctrack->req_retrans_counter, threshold);
 			ctrack_stop_retrans_counter(ctrack);
 			ctrack->failure_detect_finalized = true;
+			if (dis->tcp && ctrack->dp->hostlist_auto_retrans_reset && (dis->ip || dis->ip6))
+			{
+				uint8_t pkt[sizeof(struct ip6_hdr)+sizeof(struct tcphdr)];
+				struct ip *ip;
+				struct ip6_hdr *ip6;
+				struct tcphdr *tcp;
+				uint16_t pktlen;
+
+				if (dis->ip)
+				{
+					ip = (struct ip*)pkt; ip6=NULL;
+					pktlen = sizeof(struct iphdr) + sizeof(struct tcphdr);
+					*ip = *dis->ip;
+					ip->ip_hl = sizeof(struct iphdr)/4; // remove ip options
+					ip->ip_len = htons(pktlen);
+					ip->ip_id=0;
+					tcp = (struct tcphdr*)(ip+1);
+					*tcp = *dis->tcp;
+				}
+				else if (dis->ip6)
+				{
+					ip6 = (struct ip6_hdr*)pkt; ip=NULL;
+					pktlen = sizeof(struct ip6_hdr) + sizeof(struct tcphdr);
+					*ip6 = *dis->ip6;
+					ip6->ip6_plen = htons(sizeof(struct tcphdr));
+					ip6->ip6_nxt = IPPROTO_TCP;
+					ip6->ip6_ctlun.ip6_un1.ip6_un1_flow = htonl(ctrack->pos.server.ip6flow);
+					tcp = (struct tcphdr*)(ip6+1);
+					*tcp = *dis->tcp;
+				}
+				reverse_ip(ip,ip6); // also fixes ip4 checksum
+				reverse_tcp(tcp);
+				tcp->th_off = sizeof(struct tcphdr)/4; // remove tcp options
+				tcp->th_flags = TH_RST;
+				tcp->th_win = ctrack->pos.server.winsize;
+				tcp_fix_checksum(tcp, sizeof(struct tcphdr), ip, ip6);
+
+				DLOG("sending RST to retransmitter\n");
+				rawsend(client,0,ifclient,pkt,pktlen);
+			}
 			return true;
 		}
 		DLOG("retrans counter : %u/%u\n", ctrack->req_retrans_counter, threshold);
@@ -330,13 +372,13 @@ static void fill_client_ip_port(const struct sockaddr *client, char *client_ip_p
 	else
 		*client_ip_port = 0;
 }
-static void process_retrans_fail(t_ctrack *ctrack, uint8_t proto, const struct sockaddr *client)
+static void process_retrans_fail(t_ctrack *ctrack, const struct dissect *dis, struct sockaddr *client, const char *ifclient)
 {
 	if (params.server) return; // no autohostlists in server mode
 
 	char client_ip_port[48];
 	fill_client_ip_port(client, client_ip_port, sizeof(client_ip_port));
-	if (ctrack && ctrack->dp && ctrack->hostname && auto_hostlist_retrans(ctrack, proto, ctrack->dp->hostlist_auto_retrans_threshold, client_ip_port, ctrack->l7proto))
+	if (ctrack && ctrack->dp && ctrack->hostname && auto_hostlist_retrans(ctrack, dis, ctrack->dp->hostlist_auto_retrans_threshold, client_ip_port, ctrack->l7proto, client, ifclient))
 	{
 		HOSTLIST_DEBUGLOG_APPEND("%s : profile %u (%s) : client %s : proto %s : retrans threshold reached", ctrack->hostname, ctrack->dp->n, PROFILE_NAME(ctrack->dp), client_ip_port, l7proto_str(ctrack->l7proto));
 		auto_hostlist_failed(ctrack->dp, ctrack->hostname, ctrack->hostname_is_ip, client_ip_port, ctrack->l7proto);
@@ -1036,7 +1078,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 		// in replay mode conntrack_replay is not NULL and ctrack is NULL
 
 		//ConntrackPoolDump(&params.conntrack);
-		if (!ConntrackPoolDoubleSearch(&params.conntrack, dis->ip, dis->ip6, dis->tcp, NULL, &ctrack_replay, &bReverse) || bReverse)
+		if (!ConntrackPoolDoubleSearch(&params.conntrack, dis, &ctrack_replay, &bReverse) || bReverse)
 			return verdict;
 		bReverseFixed = bReverse ^ params.server;
 		setup_direction(dis, bReverseFixed, &src, &dst, &sdip4, &sdip6, &sdport);
@@ -1068,7 +1110,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 		if (!params.ctrack_disable)
 		{
 			ConntrackPoolPurge(&params.conntrack);
-			if (ConntrackPoolFeed(&params.conntrack, dis->ip, dis->ip6, dis->tcp, NULL, dis->len_payload, &ctrack, &bReverse))
+			if (ConntrackPoolFeed(&params.conntrack, dis, &ctrack, &bReverse))
 			{
 				dp = ctrack->dp;
 				ctrack_replay = ctrack;
@@ -1228,7 +1270,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 			rlen_payload = ctrack->reasm_client.size_present;
 		}
 
-		process_retrans_fail(ctrack, IPPROTO_TCP, (struct sockaddr*)&src);
+		process_retrans_fail(ctrack, dis, (struct sockaddr*)&src, ifin);
 		if (IsHttp(rdata_payload, rlen_payload))
 		{
 			DLOG("packet contains HTTP request\n");
@@ -1498,7 +1540,7 @@ static uint8_t dpi_desync_udp_packet_play(
 		// in replay mode conntrack_replay is not NULL and ctrack is NULL
 
 		//ConntrackPoolDump(&params.conntrack);
-		if (!ConntrackPoolDoubleSearch(&params.conntrack, dis->ip, dis->ip6, NULL, dis->udp, &ctrack_replay, &bReverse) || bReverse)
+		if (!ConntrackPoolDoubleSearch(&params.conntrack, dis, &ctrack_replay, &bReverse) || bReverse)
 			return verdict;
 		bReverseFixed = bReverse ^ params.server;
 		setup_direction(dis, bReverseFixed, &src, &dst, &sdip4, &sdip6, &sdport);
@@ -1530,7 +1572,7 @@ static uint8_t dpi_desync_udp_packet_play(
 		if (!params.ctrack_disable)
 		{
 			ConntrackPoolPurge(&params.conntrack);
-			if (ConntrackPoolFeed(&params.conntrack, dis->ip, dis->ip6, NULL, dis->udp, dis->len_payload, &ctrack, &bReverse))
+			if (ConntrackPoolFeed(&params.conntrack, dis, &ctrack, &bReverse))
 			{
 				dp = ctrack->dp;
 				ctrack_replay = ctrack;
@@ -1836,13 +1878,8 @@ static uint8_t dpi_desync_udp_packet_play(
 					ctrack_replay->bCheckExcluded = bCheckExcluded;
 				}
 			}
-			if (bCheckResult)
-				ctrack_stop_retrans_counter(ctrack_replay);
-			else
-			{
-				if (ctrack_replay)
-					ctrack_replay->hostname_ah_check = dp->hostlist_auto && !bCheckExcluded;
-			}
+			if (!bCheckResult && ctrack_replay)
+				ctrack_replay->hostname_ah_check = dp->hostlist_auto && !bCheckExcluded;
 		}
 
 		process_udp_fail(ctrack_replay, tpos, (struct sockaddr*)&src);

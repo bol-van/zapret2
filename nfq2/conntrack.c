@@ -70,24 +70,24 @@ void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_s
 	p->pool = NULL;
 }
 
-void ConntrackExtractConn(t_conn *c, bool bReverse, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr)
+void ConntrackExtractConn(t_conn *c, bool bReverse, const struct dissect *dis)
 {
 	memset(c, 0, sizeof(*c));
-	if (ip)
+	if (dis->ip)
 	{
 		c->l3proto = IPPROTO_IP;
-		c->dst.ip = bReverse ? ip->ip_src : ip->ip_dst;
-		c->src.ip = bReverse ? ip->ip_dst : ip->ip_src;
+		c->dst.ip = bReverse ? dis->ip->ip_src : dis->ip->ip_dst;
+		c->src.ip = bReverse ? dis->ip->ip_dst : dis->ip->ip_src;
 	}
-	else if (ip6)
+	else if (dis->ip6)
 	{
 		c->l3proto = IPPROTO_IPV6;
-		c->dst.ip6 = bReverse ? ip6->ip6_src : ip6->ip6_dst;
-		c->src.ip6 = bReverse ? ip6->ip6_dst : ip6->ip6_src;
+		c->dst.ip6 = bReverse ? dis->ip6->ip6_src : dis->ip6->ip6_dst;
+		c->src.ip6 = bReverse ? dis->ip6->ip6_dst : dis->ip6->ip6_src;
 	}
 	else
 		c->l3proto = -1;
-	extract_ports(tcphdr, udphdr, &c->l4proto, bReverse ? &c->dport : &c->sport, bReverse ? &c->sport : &c->dport);
+	extract_ports(dis->tcp, dis->udp, &c->l4proto, bReverse ? &c->dport : &c->sport, bReverse ? &c->sport : &c->dport);
 }
 
 
@@ -127,7 +127,7 @@ static t_conntrack_pool *ConntrackNew(t_conntrack_pool **pp, const t_conn *c)
 	return ctnew;
 }
 
-static void ConntrackApplyPos(const struct tcphdr *tcp, t_ctrack *t, bool bReverse, uint32_t len_payload)
+static void ConntrackApplyPos(t_ctrack *t, bool bReverse, const struct dissect *dis)
 {
 	uint8_t scale;
 	uint16_t mss;
@@ -136,21 +136,23 @@ static void ConntrackApplyPos(const struct tcphdr *tcp, t_ctrack *t, bool bRever
 	direct = bReverse ? &t->pos.server : &t->pos.client;
 	reverse = bReverse ? &t->pos.client : &t->pos.server;
 
-	scale = tcp_find_scale_factor(tcp);
-	mss = ntohs(tcp_find_mss(tcp));
+	if (dis->ip6) direct->ip6flow = ntohl(dis->ip6->ip6_ctlun.ip6_un1.ip6_un1_flow);
 
-	direct->seq_last = ntohl(tcp->th_seq);
-	direct->pos = direct->seq_last + len_payload;
-	reverse->pos = reverse->seq_last = ntohl(tcp->th_ack);
+	scale = tcp_find_scale_factor(dis->tcp);
+	mss = ntohs(tcp_find_mss(dis->tcp));
+
+	direct->seq_last = ntohl(dis->tcp->th_seq);
+	direct->pos = direct->seq_last + dis->len_payload;
+	reverse->pos = reverse->seq_last = ntohl(dis->tcp->th_ack);
 	if (t->pos.state == SYN)
 		direct->uppos_prev = direct->uppos = direct->pos;
-	else if (len_payload)
+	else if (dis->len_payload)
 	{
 		direct->uppos_prev = direct->uppos;
 		if (!((direct->pos - direct->uppos) & 0x80000000))
 			direct->uppos = direct->pos;
 	}
-	direct->winsize = ntohs(tcp->th_win);
+	direct->winsize = ntohs(dis->tcp->th_win);
 	direct->winsize_calc = direct->winsize;
 	if (direct->scale != SCALE_NONE) direct->winsize_calc <<= direct->scale;
 	if (mss && !direct->mss) direct->mss = mss;
@@ -162,8 +164,7 @@ static void ConntrackApplyPos(const struct tcphdr *tcp, t_ctrack *t, bool bRever
 		reverse->rseq_over_2G = true;
 }
 
-// non-tcp packets are passed with tcphdr=NULL but len_payload filled
-static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct tcphdr *tcphdr, uint32_t len_payload)
+static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct dissect *dis)
 {
 	uint8_t scale;
 	uint16_t mss;
@@ -171,34 +172,34 @@ static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct tcphdr 
 	if (bReverse)
 	{
 		t->pos.server.pcounter++;
-		t->pos.server.pdcounter += !!len_payload;
-		t->pos.server.pbcounter += len_payload;
+		t->pos.server.pdcounter += !!dis->len_payload;
+		t->pos.server.pbcounter += dis->len_payload;
 	}
 
 	else
 	{
 		t->pos.client.pcounter++;
-		t->pos.client.pdcounter += !!len_payload;
-		t->pos.client.pbcounter += len_payload;
+		t->pos.client.pdcounter += !!dis->len_payload;
+		t->pos.client.pbcounter += dis->len_payload;
 	}
 
-	if (tcphdr)
+	if (dis->tcp)
 	{
-		if (tcp_syn_segment(tcphdr))
+		if (tcp_syn_segment(dis->tcp))
 		{
 			if (t->pos.state != SYN) ConntrackReInitTrack(t); // erase current entry
-			t->pos.client.seq0 = ntohl(tcphdr->th_seq);
+			t->pos.client.seq0 = ntohl(dis->tcp->th_seq);
 		}
-		else if (tcp_synack_segment(tcphdr))
+		else if (tcp_synack_segment(dis->tcp))
 		{
 			// ignore SA dups
-			uint32_t seq0 = ntohl(tcphdr->th_ack) - 1;
+			uint32_t seq0 = ntohl(dis->tcp->th_ack) - 1;
 			if (t->pos.state != SYN && t->pos.client.seq0 != seq0)
 				ConntrackReInitTrack(t); // erase current entry
 			if (!t->pos.client.seq0) t->pos.client.seq0 = seq0;
-			t->pos.server.seq0 = ntohl(tcphdr->th_seq);
+			t->pos.server.seq0 = ntohl(dis->tcp->th_seq);
 		}
-		else if (tcphdr->th_flags & (TH_FIN | TH_RST))
+		else if (dis->tcp->th_flags & (TH_FIN | TH_RST))
 		{
 			t->pos.state = FIN;
 		}
@@ -207,11 +208,11 @@ static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct tcphdr 
 			if (t->pos.state == SYN)
 			{
 				t->pos.state = ESTABLISHED;
-				if (!bReverse && !t->pos.server.seq0) t->pos.server.seq0 = ntohl(tcphdr->th_ack) - 1;
+				if (!bReverse && !t->pos.server.seq0) t->pos.server.seq0 = ntohl(dis->tcp->th_ack) - 1;
 			}
 		}
 
-		ConntrackApplyPos(tcphdr, t, bReverse, len_payload);
+		ConntrackApplyPos(t, bReverse, dis);
 	}
 
 	clock_gettime(CLOCK_REALTIME, &t->pos.t_last);
@@ -219,12 +220,12 @@ static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct tcphdr 
 	if (!t->t_start.tv_sec) t->t_start = t->pos.t_last;
 }
 
-static bool ConntrackPoolDoubleSearchPool(t_conntrack_pool **pp, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr, t_ctrack **ctrack, bool *bReverse)
+static bool ConntrackPoolDoubleSearchPool(t_conntrack_pool **pp, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse)
 {
 	t_conn conn, connswp;
 	t_conntrack_pool *ctr;
 
-	ConntrackExtractConn(&conn, false, ip, ip6, tcphdr, udphdr);
+	ConntrackExtractConn(&conn, false, dis);
 	if ((ctr = ConntrackPoolSearch(*pp, &conn)))
 	{
 		if (bReverse) *bReverse = false;
@@ -243,22 +244,22 @@ static bool ConntrackPoolDoubleSearchPool(t_conntrack_pool **pp, const struct ip
 	}
 	return false;
 }
-bool ConntrackPoolDoubleSearch(t_conntrack *p, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr, t_ctrack **ctrack, bool *bReverse)
+bool ConntrackPoolDoubleSearch(t_conntrack *p, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse)
 {
-	return ConntrackPoolDoubleSearchPool(&p->pool, ip, ip6, tcphdr, udphdr, ctrack, bReverse);
+	return ConntrackPoolDoubleSearchPool(&p->pool, dis, ctrack, bReverse);
 }
 
-static bool ConntrackPoolFeedPool(t_conntrack_pool **pp, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr, size_t len_payload, t_ctrack **ctrack, bool *bReverse)
+static bool ConntrackPoolFeedPool(t_conntrack_pool **pp, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse)
 {
 	t_conn conn, connswp;
 	t_conntrack_pool *ctr;
 	bool b_rev;
-	uint8_t proto = tcphdr ? IPPROTO_TCP : udphdr ? IPPROTO_UDP : IPPROTO_NONE;
+	uint8_t proto = dis->tcp ? IPPROTO_TCP : dis->udp ? IPPROTO_UDP : IPPROTO_NONE;
 
-	ConntrackExtractConn(&conn, false, ip, ip6, tcphdr, udphdr);
+	ConntrackExtractConn(&conn, false, dis);
 	if ((ctr = ConntrackPoolSearch(*pp, &conn)))
 	{
-		ConntrackFeedPacket(&ctr->track, (b_rev = false), tcphdr, len_payload);
+		ConntrackFeedPacket(&ctr->track, (b_rev = false), dis);
 		goto ok;
 	}
 	else
@@ -266,16 +267,16 @@ static bool ConntrackPoolFeedPool(t_conntrack_pool **pp, const struct ip *ip, co
 		connswap(&conn, &connswp);
 		if ((ctr = ConntrackPoolSearch(*pp, &connswp)))
 		{
-			ConntrackFeedPacket(&ctr->track, (b_rev = true), tcphdr, len_payload);
+			ConntrackFeedPacket(&ctr->track, (b_rev = true), dis);
 			goto ok;
 		}
 	}
-	b_rev = tcphdr && tcp_synack_segment(tcphdr);
-	if ((tcphdr && tcp_syn_segment(tcphdr)) || b_rev || udphdr)
+	b_rev = dis->tcp && tcp_synack_segment(dis->tcp);
+	if ((dis->tcp && tcp_syn_segment(dis->tcp)) || b_rev || dis->udp)
 	{
 		if ((ctr = ConntrackNew(pp, b_rev ? &connswp : &conn)))
 		{
-			ConntrackFeedPacket(&ctr->track, b_rev, tcphdr, len_payload);
+			ConntrackFeedPacket(&ctr->track, b_rev, dis);
 			goto ok;
 		}
 	}
@@ -286,16 +287,16 @@ ok:
 	if (bReverse) *bReverse = b_rev;
 	return true;
 }
-bool ConntrackPoolFeed(t_conntrack *p, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr, size_t len_payload, t_ctrack **ctrack, bool *bReverse)
+bool ConntrackPoolFeed(t_conntrack *p, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse)
 {
-	return ConntrackPoolFeedPool(&p->pool, ip, ip6, tcphdr, udphdr, len_payload, ctrack, bReverse);
+	return ConntrackPoolFeedPool(&p->pool, dis, ctrack, bReverse);
 }
 
-static bool ConntrackPoolDropPool(t_conntrack_pool **pp, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr)
+static bool ConntrackPoolDropPool(t_conntrack_pool **pp, const struct dissect *dis)
 {
 	t_conn conn, connswp;
 	t_conntrack_pool *t;
-	ConntrackExtractConn(&conn, false, ip, ip6, tcphdr, udphdr);
+	ConntrackExtractConn(&conn, false, dis);
 	if (!(t = ConntrackPoolSearch(*pp, &conn)))
 	{
 		connswap(&conn, &connswp);
@@ -305,9 +306,9 @@ static bool ConntrackPoolDropPool(t_conntrack_pool **pp, const struct ip *ip, co
 	HASH_DEL(*pp, t); ConntrackFreeElem(t);
 	return true;
 }
-bool ConntrackPoolDrop(t_conntrack *p, const struct ip *ip, const struct ip6_hdr *ip6, const struct tcphdr *tcphdr, const struct udphdr *udphdr)
+bool ConntrackPoolDrop(t_conntrack *p, const struct dissect *dis)
 {
-	return ConntrackPoolDropPool(&p->pool, ip, ip6, tcphdr, udphdr);
+	return ConntrackPoolDropPool(&p->pool, dis);
 }
 
 void ConntrackPoolPurge(t_conntrack *p)

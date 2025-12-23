@@ -547,6 +547,33 @@ void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis)
 	}
 }
 
+void reverse_ip(struct ip *ip, struct ip6_hdr *ip6)
+{
+	if (ip)
+	{
+		struct in_addr temp = ip->ip_src;
+		ip->ip_src = ip->ip_dst;
+		ip->ip_dst = temp;
+		ip4_fix_checksum(ip);
+	}
+	if (ip6)
+	{
+		struct in6_addr temp = ip6->ip6_src;
+		ip6->ip6_src = ip6->ip6_dst;
+		ip6->ip6_dst = temp;
+	}
+}
+void reverse_tcp(struct tcphdr *tcp)
+{
+	uint16_t tport = tcp->th_sport;
+	tcp->th_sport = tcp->th_dport;
+	tcp->th_dport = tport;
+
+	uint32_t tseq = tcp->th_seq;
+	tcp->th_seq = tcp->th_ack;
+	tcp->th_ack = tseq;
+}
+
 
 uint8_t ttl46(const struct ip *ip, const struct ip6_hdr *ip6)
 {
