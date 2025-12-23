@@ -130,6 +130,7 @@
       * [apply_fooling](#apply_fooling)
       * [ipfrag2](#ipfrag2)
       * [wssize_rewrite](#wssize_rewrite)
+      * [dis_reverse](#dis_reverse)
    * [Отсылка](#отсылка)
       * [rawsend_dissect_ipfrag](#rawsend_dissect_ipfrag)
       * [rawsend_dissect_segmented](#rawsend_dissect_segmented)
