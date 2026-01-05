@@ -3150,7 +3150,6 @@ static void lua_init_const(void)
 		{"TH_RST",TH_RST},
 		{"TH_PUSH",TH_PUSH},
 		{"TH_ACK",TH_ACK},
-		{"TH_FIN",TH_FIN},
 		{"TH_URG",TH_URG},
 		{"TH_ECE",0x40},
 		{"TH_CWR",0x80},
