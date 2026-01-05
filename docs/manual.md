@@ -1464,7 +1464,7 @@ ipv6 extension headers и tcp options представляются в форме
 | ip_p    | [номер ip протокола](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml). как правило IPPROTO_TCP или IPPROTO_UDP |
 | ip_sum  | чексумма ip хедера                                                                                                                      |
 | ip_src  | ip источника                                                                                                                            |
-| ip_src  | ip назначения                                                                                                                           |
+| ip_dst  | ip назначения                                                                                                                           |
 | options | бинарный блок ip options (практически не используется, режется всеми)                                                                   |
 
 **ip6**
