@@ -2487,7 +2487,7 @@ function http_reconstruct_req(hdis, unixeol)
 Разборка HTTP запроса или ответа http. http представляет собой многострочный текст.
 Разборка представляет собой таблицу с вложенными подтаблицами.
 В заголовках выдаются позиции начала и конца названия заголовка и самого значения.
-Названия полей в таблице headers соответствуют названию заголовков в нижнем регисте. Все позиции - внутри строки http.
+Названия полей в таблице headers соответствуют названию заголовков в нижнем регистре. Все позиции - внутри строки http.
 
 Реконструктор http запроса берет таблицу-разбор и воссоздает raw string. Параметр unixeol заменяет стандартный для http перевод сктроки 0D0A на 0A. Это нестандарт и ломает все сервера, кроме nginx.
 
@@ -2573,7 +2573,7 @@ function tls_reconstruct(tdis)
 1. Любой TLS handshake без TLS record (включая client/server hello). Например, взятый из `desync.decrypt_data` от QUIC.
 2. Любые TLS records. Handshake, certificate, change cipher spec и другие.
 3. Резаные handshake на несколько TLS records (например, результат `tpws --tlsrec`)
-4. (только dissect) Неполные блоки данных, если parialOK=true. Восстанавливается максимум возможного, но полноценно собрать уже не выйдет.
+4. (только dissect) Неполные блоки данных, если partialOK=true. Восстанавливается максимум возможного, но полноценно собрать уже не выйдет.
 5. Все handshake выносятся в отдельную таблицу. Для client/server hello выполняется диссект, остальные оставляются как raw data field.
 6. TLS extensions из client/server hello : server name, alpn, supported versions, compress certificate, signature algorithms, delegated credentials, supported groups, ec point formats, psk key exchange modes, key share, quic transport parameters. Остальные extensions не парсятся и оставляются как raw data field.
 7. Если есть record layer, реконструкция выполняется согласно длинам отдельных records. Если последняя часть не влезает, tls record расширяется под оставшиеся данные.
