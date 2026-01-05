@@ -2334,9 +2334,9 @@ function array_field_search(a, f, v)
 function in_list(s, v)
 ```
 
-### find_next_line
-
 Включена ли строка v в список строк через запятую s. Например, `abc` включено в список `xyz,abc,12345`.
+
+### find_next_line
 
 ```
 function find_next_line(s, pos)
