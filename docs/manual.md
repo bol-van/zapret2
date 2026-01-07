@@ -3186,7 +3186,7 @@ function dis_reverse(dis)
 ## Отсылка
 
 Следующие функции могут брать несколько блоков описанных выше опций, каждый из которых представлен полем параметра options.
-Во всех функциях используется [options.reconstruct](#standard-reconstruct) и (options.rawsend)[#standard-rawsend). Они соответствуют формату параметров C функции [rawsend_dissect](#rawsend).
+Во всех функциях используется [options.reconstruct](#standard-reconstruct) и [options.rawsend](#standard-rawsend). Они соответствуют формату параметров C функции [rawsend_dissect](#rawsend).
 
 ### rawsend_dissect_ipfrag
 
