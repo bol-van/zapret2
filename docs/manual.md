@@ -4130,7 +4130,7 @@ condition вызывает iff. если iff xor neg = true, выполняют�
 ### stopif
 
 ```
-function condition(ctx, desync)
+function stopif(ctx, desync)
 ```
 
 - arg: iff - имя [функции условия](#iff-функции)
