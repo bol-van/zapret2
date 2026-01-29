@@ -5184,7 +5184,7 @@ filter_apply_hostlist_target()
 # $1 - имя переменной с опциями nfqws2
 ```
 
-Осуществляет замену маркеров `<HOSTLIST>` и `<HOSTLIST_AUTO>` в $1 зависимости от режима фильтрации [MODE_FILTER](#файл-config) и наличия файлов листов в ipset.
+Осуществляет замену маркеров `<HOSTLIST>` и `<HOSTLIST_NOAUTO>` в $1 зависимости от режима фильтрации [MODE_FILTER](#файл-config) и наличия файлов листов в ipset.
 
 ```
 standard_mode_daemons()
