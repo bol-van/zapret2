@@ -3646,7 +3646,11 @@ static int luacall_stat(lua_State *L)
 		lua_pushf_lint(L,"dev", st.st_dev);
 		lua_pushf_lint(L,"inode", st.st_ino);
 		lua_pushf_lint(L,"size", st.st_size);
+#ifdef __APPLE__
+		lua_pushf_number(L,"mtime", st.st_mtimespec.tv_sec + st.st_mtimespec.tv_nsec/1000000000.);
+#else
 		lua_pushf_number(L,"mtime", st.st_mtim.tv_sec + st.st_mtim.tv_nsec/1000000000.);
+#endif
 
 		const char *ftype;
 		switch(st.st_mode & S_IFMT)

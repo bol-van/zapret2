@@ -11,6 +11,9 @@
 #include <libgen.h>
 #include <errno.h>
 #include <sys/param.h>
+#ifdef __APPLE__
+#include <sys/random.h>
+#endif
 
 #define UNIQ_SORT \
 { \
