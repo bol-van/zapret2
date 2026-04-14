@@ -18,9 +18,6 @@
 #include <time.h>
 #include <sys/queue.h>
 #include <lua.h>
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
-#include <wordexp.h>
-#endif
 
 #define RAW_SNDBUF	(64*1024)	// in bytes
 
@@ -127,9 +124,9 @@ void dp_clear(struct desync_profile *dp);
 
 struct params_s
 {
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
-	wordexp_t wexp; // for file based config
-#endif
+	int config_argc;
+	char **config_argv;
+	char *config_buf;
 	char verstr[128];
 
 	enum log_target debug_target;
@@ -207,9 +204,7 @@ extern struct params_s params;
 extern const char *progname;
 
 void init_params(struct params_s *params);
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
 void cleanup_args(struct params_s *params);
-#endif
 #ifdef __CYGWIN__
 bool alloc_windivert_portfilters(struct params_s *params);
 void cleanup_windivert_portfilters(struct params_s *params);
