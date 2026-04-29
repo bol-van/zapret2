@@ -19,11 +19,13 @@ do_start()
 {
 	zapret_run_daemons
 	[ "$INIT_APPLY_FW" != "1" ] || { zapret_apply_firewall; }
+	touch /var/run/zapret2.pid
 }
 do_stop()
 {
 	zapret_stop_daemons
 	[ "$INIT_APPLY_FW" != "1" ] || zapret_unapply_firewall
+	rm -f /var/run/zapret2.pid
 }
 
 case "$1" in
