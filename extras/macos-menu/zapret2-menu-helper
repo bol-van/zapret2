@@ -1,0 +1,60 @@
+#!/bin/sh
+set -eu
+
+ZAPRET_BASE=${ZAPRET_BASE:-/opt/zapret2}
+TPWS_PATTERN="^$ZAPRET_BASE/tpws/tpws"
+
+matching_tpws_pids() {
+  /usr/bin/pgrep -f "$TPWS_PATTERN" 2>/dev/null || true
+}
+
+stop_tpws() {
+  pids=$(matching_tpws_pids)
+  if [ -n "$pids" ]; then
+    /bin/kill $pids 2>/dev/null || true
+    /bin/sleep 1
+    pids=$(matching_tpws_pids)
+    [ -z "$pids" ] || /bin/kill -9 $pids 2>/dev/null || true
+  fi
+}
+
+prepare_runtime_dirs() {
+  /bin/mkdir -p /var/run/zapret2
+}
+
+require_runtime() {
+  [ -x "$ZAPRET_BASE/init.d/macos/zapret" ] || {
+    echo "zapret2 macOS compatibility runtime is missing at $ZAPRET_BASE." >&2
+    echo "Run extras/macos-menu/install.sh first." >&2
+    exit 70
+  }
+}
+
+case "${1:-}" in
+  start)
+    require_runtime
+    prepare_runtime_dirs
+    if [ -n "$(matching_tpws_pids)" ]; then
+      echo "zapret2 compatibility backend is already running"
+      exit 0
+    fi
+    "$ZAPRET_BASE/init.d/macos/zapret" start
+    ;;
+  stop)
+    require_runtime
+    "$ZAPRET_BASE/init.d/macos/zapret" stop || true
+    stop_tpws
+    ;;
+  restart)
+    "$0" stop
+    "$0" start
+    ;;
+  update)
+    require_runtime
+    "$ZAPRET_BASE/ipset/get_refilter_domains.sh"
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|update}" >&2
+    exit 64
+    ;;
+esac
