@@ -86,6 +86,7 @@ end
 
 -- nfqws1 : "--dup"
 -- standard args : direction, fooling, ip_id, ipfrag, rawsend, reconstruct
+-- arg : delay=<msec> - drop and send delayed
 function send(ctx, desync)
 	direction_cutoff_opposite(ctx, desync, "any")
 	if direction_check(desync, "any") then
@@ -93,9 +94,19 @@ function send(ctx, desync)
 		local dis = deepcopy(desync.dis)
 		apply_fooling(desync, dis)
 		apply_ip_id(desync, dis, nil, "none")
-		-- it uses rawsend, reconstruct and ipfrag options
-		rawsend_dissect_ipfrag(dis, desync_opts(desync))
+		if desync.arg.delay then
+			local tname = "send_"..desync_timer_name(desync)
+			timer_set(tname, "send_timer_delayed", tonumber(desync.arg.delay), true, {dis = desync.dis, opts = desync_opts(desync)})
+			return VERDICT_DROP
+		else
+			-- it uses rawsend, reconstruct and ipfrag options
+			rawsend_dissect_ipfrag(dis, desync_opts(desync))
+		end
 	end
+end
+function send_timer_delayed(name, data)
+	-- oneshot timer, auto deletes
+	rawsend_dissect_ipfrag(data.dis, data.opts)
 end
 
 -- nfqws1 : "--orig"

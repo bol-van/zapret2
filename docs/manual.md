@@ -159,6 +159,7 @@
     - [rawsend_payload_segmented](#rawsend_payload_segmented)
   - [Стандартные фильтры direction и payload](#стандартные-фильтры-direction-и-payload)
   - [Работа с многопакетными пейлоадам](#работа-с-многопакетными-пейлоадам)
+  - [Помощь с таймерами](#помощь-с-таймерами)
   - [Оркестрация](#оркестрация)
     - [instance_cutoff_shim](#instance_cutoff_shim)
     - [cutoff_shim_check](#cutoff_shim_check)
@@ -3782,6 +3783,24 @@ function replay_drop(desync)
 
 Функции работают корректно как с [реплеем](#особенности-приема-многопакетных-пейлоадов), так и обычными диссектами. Для обычных диссектов replay_first всегда true, replay_drop_set не меняет признак, replay_drop всегда false.
 
+## Помощь с таймерами
+
+```
+function dis_timer_name(dis)
+```
+
+Конструирует имя таймера, включающее в себя ip адреса src,dst, имя протокола l4, номера портов или icmp коды.
+Имя таймера может не быть уникальным.
+
+```
+function desync_timer_name(desync)
+```
+
+Конструирует имя таймера, включающее в себя результат dis_timer_name + номер пакета в conntrack по прямому направлению.
+Если track отсутствует, добавляются случайные символы.
+Имя таймера можно считать уникальным на desync, его можно использовать как oneshot timer name.
+
+
 ## Оркестрация
 
 В эту группу функций входят функции поддержки процесса оркестрации и прокладки.
@@ -3951,9 +3970,11 @@ function send(ctx, desync)
 - arg: [standard ipfrag](#standard-ipfrag)
 - arg: [standard reconstruct](#standard-reconstruct)
 - arg: [standard rawsend](#standard-rawsend)
+- arg: delay - задержка отправки в мсек
 - режим ip_id по умолчанию - none
 
 Отсылает текущий диссект c опциональным применением модификаций.
+При наличии параметра delay выносится вердикт drop. Данные пакета и опции отправки запоминаются. Спустя указанное время происходит отправка.
 
 ### pktmod
 

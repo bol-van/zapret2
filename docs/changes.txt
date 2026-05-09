@@ -288,3 +288,11 @@ v0.9.4.3
 0.9.5.1
 
 * nfqws2: timer_info, timer_enum
+
+0.9.5.2
+
+* nfqws2: rewrite time counting algorithm, remove --timer-res
+
+0.9.5.3
+
+* zapret-lib,zapret-antidpi: delay parameter in "send" desync function

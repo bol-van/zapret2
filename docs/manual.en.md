@@ -162,6 +162,7 @@
     - [rawsend_payload_segmented](#rawsend_payload_segmented)
   - [Standard direction and payload filters](#standard-direction-and-payload-filters)
   - [Working with multi-packet payloads](#working-with-multi-packet-payloads)
+  - [Timer helpers](#timer-helpers)
   - [Orchestration](#orchestration)
     - [instance_cutoff_shim](#instance_cutoff_shim)
     - [cutoff_shim_check](#cutoff_shim_check)
@@ -3603,6 +3604,23 @@ function replay_drop(desync)
 
 These functions work correctly with both [replays](#handling-multi-packet-payloads) and regular dissects. For regular dissects, `replay_first` is always true, `replay_drop_set` does not change the flag, and `replay_drop` is always false.
 
+## Timer helpers
+
+```
+function dis_timer_name(dis)
+```
+
+Construct timer name based on ip src and dst addresses, l4 protocol name, port numbers or icmp codes.
+May not be unique.
+
+```
+function desync_timer_name(desync)
+```
+
+Construct timer name that includes dis_timer_name result + conntrack packet number.
+If track is absent random characters are added to the end.
+This name can be considered unique per desync and can be used as an oneshot timer name.
+
 ## Orchestration
 
 This group includes functions that support the orchestration and shimming processes.
@@ -3767,9 +3785,12 @@ function send(ctx, desync)
 - arg: [standard ipfrag](#standard-ipfrag)
 - arg: [standard reconstruct](#standard-reconstruct)
 - arg: [standard rawsend](#standard-rawsend)
+- arg: delay - packet send delay in msec
 - Default `ip_id` mode is `none`.
 
 Sends the current dissect with optional modifications applied.
+If delay is specified function returns VERDICT_DROP. Packet data and send options are remembered. After specified time packet is sent out.
+
 
 ### pktmod
 
