@@ -1,6 +1,8 @@
 # macOS Native Backend Notes
 
-`zapret2` does not currently have a native macOS packet backend. The menu app in `extras/macos-menu` is a practical compatibility layer: it controls a copied `zapret` v1 macOS runtime (`tpws + pf`) installed under `/opt/zapret2`.
+`zapret2` does not currently have a complete native macOS packet backend. The macOS menu app is now being moved away from the old `zapret` v1 `tpws + pf` compatibility layer toward a real zapret2 backend.
+
+The development scaffold lives in `extras/macos-native`. It does not claim traffic interception is ready yet; it exists to make the boundary explicit and prevent the old runtime from being mistaken for the new engine.
 
 This document describes what would be required for a true native `zapret2` backend on macOS.
 
@@ -106,4 +108,4 @@ The key new component is the macOS packet adapter. It would translate between Ap
 
 ## Compatibility Layer Position
 
-`extras/macos-menu` intentionally does not claim to be this native backend. It exists so macOS users with a working `zapret` v1 setup can get the same menu bar workflow while `zapret2` native macOS support remains a separate engineering effort.
+`extras/macos-menu` is the user-facing macOS controller. It should not own packet processing. Its job is to start, stop, update, and diagnose the native backend once the Network Extension adapter is implemented.

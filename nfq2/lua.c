@@ -36,6 +36,10 @@ typedef struct _SOCKET_ADDRESS {
 #define _NETIOAPI_H_
 #include <iphlpapi.h>
 
+#elif defined(__APPLE__)
+
+#include <pthread.h>
+
 #endif
 
 #include "lua.h"
@@ -796,6 +800,12 @@ static int luacall_gettid(lua_State *L)
 	lua_pushinteger(L, syscall(SYS_gettid));
 #elif defined(__CYGWIN__)
 	lua_pushinteger(L, GetCurrentThreadId());
+#elif defined(__APPLE__)
+	uint64_t tid;
+	if (pthread_threadid_np(NULL, &tid))
+		lua_pushnil(L);
+	else
+		lua_pushinteger(L, (lua_Integer)tid);
 #else
 	// unsupported OS ?
 	lua_pushnil(L);
@@ -3683,7 +3693,11 @@ static int luacall_stat(lua_State *L)
 		lua_pushf_lint(L,"dev", st.st_dev);
 		lua_pushf_lint(L,"inode", st.st_ino);
 		lua_pushf_lint(L,"size", st.st_size);
+#ifdef __APPLE__
+		lua_pushf_number(L,"mtime", st.st_mtimespec.tv_sec + st.st_mtimespec.tv_nsec/1000000000.);
+#else
 		lua_pushf_number(L,"mtime", st.st_mtim.tv_sec + st.st_mtim.tv_nsec/1000000000.);
+#endif
 
 		const char *ftype;
 		switch(st.st_mode & S_IFMT)

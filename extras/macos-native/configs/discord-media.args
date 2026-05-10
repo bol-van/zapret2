@@ -1,0 +1,6 @@
+--intercept=0
+--lua-init=@lua/zapret-lib.lua
+--lua-init=@lua/zapret-antidpi.lua
+--filter-l7=stun,discord
+--payload=stun,discord_ip_discovery
+--lua-desync=fake:blob=0x00000000000000000000000000000000:repeats=2

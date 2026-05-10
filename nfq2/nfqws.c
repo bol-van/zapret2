@@ -13,6 +13,9 @@
 #include "pools.h"
 #include "timer.h"
 #include "lua.h"
+#include "zapret2_config.h"
+#include "zapret2_defaults.h"
+#include "zapret2_profiles.h"
 #include "crypto/aes.h"
 
 #include <stdio.h>
@@ -50,11 +53,7 @@
 #define NF_ACCEPT 1
 #endif
 
-#define MAX_CONFIG_FILE_SIZE 16384
-
-struct params_s params;
 static volatile sig_atomic_t bReload = false;
-volatile sig_atomic_t bQuit = false;
 
 static void onhup(int sig)
 {
@@ -1538,23 +1537,6 @@ static void LuaDesyncDebug(struct desync_profile *dp, const char *entity)
 	}
 }
 
-static bool filter_defaults(struct desync_profile *dp)
-{
-	// enable both ipv4 and ipv6 if not specified
-	if (!dp->b_filter_l3) dp->filter_ipv4 = dp->filter_ipv6 = true;
-
-	// if any filter is set - deny all unset
-	if (!LIST_EMPTY(&dp->pf_tcp) || !LIST_EMPTY(&dp->pf_udp) || !LIST_EMPTY(&dp->icf) || !LIST_EMPTY(&dp->ipf))
-	{
-		return port_filters_deny_if_empty(&dp->pf_tcp) &&
-			port_filters_deny_if_empty(&dp->pf_udp) &&
-			icmp_filters_deny_if_empty(&dp->icf) &&
-			ipp_filters_deny_if_empty(&dp->ipf);
-	}
-	return true;
-}
-
-
 #ifdef __CYGWIN__
 static bool wf_make_pf(char *opt, const char *l4, const char *portname, char *buf, size_t len)
 {
@@ -1935,39 +1917,15 @@ static void exithelp_clean(void)
 // no static to not allow optimizer to inline this func (save stack)
 void config_from_file(const char *filename)
 {
-	// config from a file
-	char buf[MAX_CONFIG_FILE_SIZE];
-	buf[0] = 'x';	// fake argv[0]
-	buf[1] = ' ';
-	size_t bufsize = sizeof(buf) - 3;
-	if (!load_file(filename, 0, buf + 2, &bufsize))
+	char errbuf[256];
+
+	if (!zapret2_config_load_args(filename, &params, errbuf, sizeof(errbuf)))
 	{
-		DLOG_ERR("could not load config file '%s'\n", filename);
-		exit_clean(1);
-	}
-	buf[bufsize + 2] = 0;
-	// wordexp fails if it sees \t \n \r between args
-	replace_char(buf, '\n', ' ');
-	replace_char(buf, '\r', ' ');
-	replace_char(buf, '\t', ' ');
-	if (wordexp(buf, &params.wexp, WRDE_NOCMD))
-	{
-		DLOG_ERR("failed to split command line options from file '%s'\n", filename);
+		DLOG_ERR("%s\n", errbuf);
 		exit_clean(1);
 	}
 }
 #endif
-
-static void ApplyDefaultBlobs(struct blob_collection_head *blobs)
-{
-	load_const_blob_to_collection("fake_default_tls",fake_tls_clienthello_default,sizeof(fake_tls_clienthello_default),blobs,BLOB_EXTRA_BYTES);
-	load_const_blob_to_collection("fake_default_http",fake_http_request_default,strlen(fake_http_request_default),blobs,0);
-
-	uint8_t buf[620];
-	memset(buf,0,sizeof(buf));
-	buf[0]=0x40;
-	load_const_blob_to_collection("fake_default_quic",buf,620,blobs,0);
-}
 
 enum opt_indices {
 	IDX_DEBUG,
@@ -2258,20 +2216,23 @@ int main(int argc, char **argv)
 
 	init_params(&params);
 
-	ApplyDefaultBlobs(&params.blobs);
+	if (!zapret2_apply_default_blobs(&params.blobs))
+	{
+		DLOG_ERR("could not apply default blobs\n");
+		exit_clean(1);
+	}
 
 	struct desync_profile_list *dpl;
 	struct desync_profile *dp;
 	unsigned int desync_profile_count = 0, desync_template_count = 0;
 
 	bTemplate = false;
-	if (!(dpl = dp_list_add(&params.desync_profiles)))
+	if (!zapret2_add_desync_profile(&params.desync_profiles, ++desync_profile_count, NULL, &dpl))
 	{
 		DLOG_ERR("desync_profile_add: out of memory\n");
 		exit_clean(1);
 	}
 	dp = &dpl->dp;
-	dp->n = ++desync_profile_count;
 
 #if !defined( __OpenBSD__) && !defined(__ANDROID__)
 	if (argc >= 2 && (argv[1][0] == '@' || argv[1][0] == '$'))
@@ -3139,7 +3100,7 @@ int main(int argc, char **argv)
 
 	DLOG("adding low-priority default empty desync profile\n");
 	// add default empty profile
-	if (!(dpl = dp_list_add(&params.desync_profiles)) || !(dpl->dp.name=strdup("no_action")))
+	if (!zapret2_add_no_action_profile(&params.desync_profiles))
 	{
 		DLOG_ERR("desync_profile_add: out of memory\n");
 		exit_clean(1);
@@ -3184,7 +3145,7 @@ int main(int argc, char **argv)
 				DLOG_ERR("could not make '%s' accessible. auto hostlist file may not be writable after privilege drop\n", dp->hostlist_auto->filename);
 
 		}
-		if (!filter_defaults(dp)) exit_clean(1);
+		if (!zapret2_apply_profile_defaults(dp)) exit_clean(1);
 		LuaDesyncDebug(dp,"profile");
 	}
 	LIST_FOREACH(dpl, &params.desync_templates, next)

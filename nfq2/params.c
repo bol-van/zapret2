@@ -10,6 +10,9 @@
 #include "pools.h"
 #include "lua.h"
 
+struct params_s params;
+volatile sig_atomic_t bQuit = false;
+
 #ifdef BSD
 const char *progname = "dvtws2";
 #elif defined(__CYGWIN__)

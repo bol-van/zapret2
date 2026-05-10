@@ -27,9 +27,9 @@ sudo rm -f "$HELPER_DST" "$SUDOERS_FILE"
 
 if [ "${REMOVE_ZAPRET2_RUNTIME:-0}" = "1" ]; then
   sudo rm -rf "$ZAPRET_BASE"
-  echo "Removed compatibility runtime: $ZAPRET_BASE"
+  echo "Removed native runtime: $ZAPRET_BASE"
 else
-  echo "Left compatibility runtime in place: $ZAPRET_BASE"
+  echo "Left native runtime in place: $ZAPRET_BASE"
 fi
 
 echo "Zapret2 Menu removed."

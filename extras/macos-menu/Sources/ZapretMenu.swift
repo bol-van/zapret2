@@ -7,8 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private let languageKey = "Zapret2MenuLanguage"
     private let startTimeKey = "Zapret2LastStartTime"
     private let stopTimeKey = "Zapret2LastStopTime"
+    private let macbookVersion = "02.00.000"
     private var refreshTimer: Timer?
     private var restartingUntil: Date?
+    private var busyStatusTitle: String?
     private var lockFileDescriptor: Int32 = -1
 
     private enum Language: String {
@@ -41,7 +43,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         menu.autoenablesItems = true
         updateStatusIcon()
         let running = isZapretRunning()
-        let connectionAvailable = isInternetReachable()
 
         let header = NSMenuItem(title: currentStatusTitle(), action: nil, keyEquivalent: "")
         header.isEnabled = false
@@ -57,10 +58,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         menu.addItem(stopItem)
 
         let restartItem = item(text("restart"), #selector(restartZapret))
-        restartItem.isEnabled = running && connectionAvailable
+        restartItem.isEnabled = running
         menu.addItem(restartItem)
         menu.addItem(.separator())
+        menu.addItem(profileMenuItem())
+        menu.addItem(.separator())
         menu.addItem(item(text("updateHostlist"), #selector(updateHostlist)))
+        menu.addItem(item(text("applyCurrentUpdate"), #selector(applyCurrentUpdate)))
+        menu.addItem(item(text("fullUpdate"), #selector(fullUpdate)))
         menu.addItem(item(text("checkConnection"), #selector(checkConnection)))
         menu.addItem(item(text("showStatus"), #selector(showStatus)))
         menu.addItem(item(text("about"), #selector(showAbout)))
@@ -82,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(stopZapret):
             return isZapretRunning()
         case #selector(restartZapret):
-            return isZapretRunning() && isInternetReachable()
+            return isZapretRunning()
         default:
             return true
         }
@@ -90,14 +95,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func updateStatusIcon() {
         if let button = statusItem.button {
-            if let until = restartingUntil, Date() < until {
+            if let busyStatusTitle {
+                button.title = "⏳"
+                button.toolTip = busyStatusTitle
+            } else if let until = restartingUntil, Date() < until {
                 button.title = "🔀"
+                button.toolTip = text("statusRestarting")
             } else {
                 restartingUntil = nil
                 button.title = isZapretRunning() ? "📳" : "📴"
+                button.toolTip = currentStatusTitle()
             }
             button.image = nil
-            button.toolTip = currentStatusTitle()
         }
     }
 
@@ -148,6 +157,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return menuItem
     }
 
+    private func profileMenuItem() -> NSMenuItem {
+        let root = NSMenuItem(title: text("nativeProfileMenu"), action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        let profiles = nativeProfiles()
+
+        if profiles.isEmpty {
+            let unavailable = NSMenuItem(title: text("statusUnavailable"), action: nil, keyEquivalent: "")
+            unavailable.isEnabled = false
+            submenu.addItem(unavailable)
+        } else {
+            for profile in profiles {
+                let item = NSMenuItem(title: profile.name, action: #selector(selectProfile(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = profile.name
+                item.state = profile.selected ? .on : .off
+                submenu.addItem(item)
+            }
+        }
+
+        root.submenu = submenu
+        return root
+    }
+
     private func currentStatusTitle() -> String {
         if let until = restartingUntil, Date() < until {
             return text("statusRestarting")
@@ -156,7 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func isZapretRunning() -> Bool {
-        let result = runShell("/usr/bin/pgrep -f '^/opt/zapret2/tpws/tpws' >/dev/null && echo yes || echo no")
+        let result = runShell("/usr/bin/pgrep -f '^/opt/zapret2/bin/zapret2-utun-runtime' >/dev/null && echo yes || echo no")
         return result.trimmingCharacters(in: .whitespacesAndNewlines) == "yes"
     }
 
@@ -185,26 +217,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return output.trimmingCharacters(in: .whitespacesAndNewlines) == "yes"
     }
 
-    @objc private func startZapret() {
-        let result = runSudo("/opt/zapret2/zapret2-menu-helper start")
-        if result.success {
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: startTimeKey)
-            showNotification(text("started"))
-        } else {
-            showCommandError(result.output)
+    private func isTcpEndpointReachable(host: String, port: Int) -> Bool {
+        let escapedHost = shellEscape(host)
+        let output = runShell("""
+        if /usr/bin/nc -G 3 -z \(escapedHost) \(port) >/dev/null 2>&1; then
+          echo yes
+        else
+          echo no
+        fi
+        """)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines) == "yes"
+    }
+
+    private func isUdpEndpointProbeReachable(host: String, port: Int) -> Bool {
+        let escapedHost = shellEscape(host)
+        let output = runShell("""
+        if /usr/bin/nc -u -G 3 -z \(escapedHost) \(port) >/dev/null 2>&1; then
+          echo yes
+        else
+          echo no
+        fi
+        """)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines) == "yes"
+    }
+
+    private func nativeBackendTrafficStatus() -> (ready: Bool, detail: String) {
+        let result = runSudo("/opt/zapret2/zapret2-menu-helper status")
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !output.isEmpty else {
+            return (false, text("statusUnavailable"))
         }
-        rebuildMenu()
+
+        let notReadyMarkers = [
+            "native backend: not running",
+            "tunnel state: utun_unavailable",
+            "tunnel state: utun_loop_pending",
+            "utun packet loop pending",
+            "packet relay loop is not implemented yet",
+            "route setup and forwarding pending",
+            "Network Extension UDP skeleton available",
+            "Usage:"
+        ]
+        let ready = result.success && !notReadyMarkers.contains { output.contains($0) }
+        return (ready, output)
+    }
+
+    private func isDiscordMediaReady(nativeBackendReady: Bool) -> Bool {
+        guard nativeBackendReady else {
+            return false
+        }
+        let profile = runSudo("/opt/zapret2/zapret2-menu-helper check-profile discord-media")
+        guard profile.success else {
+            return false
+        }
+        return isUdpEndpointProbeReachable(host: "stun.l.google.com", port: 19302)
+    }
+
+    private func setBusyStatus(_ message: String?) {
+        busyStatusTitle = message
+        updateStatusIcon()
+    }
+
+    @objc private func startZapret() {
+        setBusyStatus(text("startingBackend"))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.runSudo("/opt/zapret2/zapret2-menu-helper start")
+            DispatchQueue.main.async {
+                self.setBusyStatus(nil)
+                if result.success {
+                    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: self.startTimeKey)
+                    self.showNotification(self.text("started"))
+                } else {
+                    self.showCommandError(result.output)
+                }
+                self.rebuildMenu()
+            }
+        }
     }
 
     @objc private func stopZapret() {
-        let result = runSudo("/opt/zapret2/zapret2-menu-helper stop")
-        if result.success {
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: stopTimeKey)
-            showNotification(text("stopped"))
-        } else {
-            showCommandError(result.output)
+        setBusyStatus(text("stoppingBackend"))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.runSudo("/opt/zapret2/zapret2-menu-helper stop")
+            DispatchQueue.main.async {
+                self.setBusyStatus(nil)
+                if result.success {
+                    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: self.stopTimeKey)
+                    self.showNotification(self.text("stopped"))
+                } else {
+                    self.showCommandError(result.output)
+                }
+                self.rebuildMenu()
+            }
         }
-        rebuildMenu()
     }
 
     @objc private func restartZapret() {
@@ -252,18 +359,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         rebuildMenu()
     }
 
-    @objc private func checkConnection() {
-        let internet = isInternetReachable()
-        let apple = isEndpointReachable("https://www.apple.com")
-        let youtube = isEndpointReachable("https://www.youtube.com")
-        let discord = isEndpointReachable("https://discord.com/")
-        showDialog(connectionReport(internet: internet, apple: apple, youtube: youtube, discord: discord), title: "Zapret2")
+    @objc private func applyCurrentUpdate() {
+        guard confirm(text("applyCurrentUpdateConfirm"), title: "Zapret2") else {
+            rebuildMenu()
+            return
+        }
 
+        setBusyStatus(text("applyingUpdate"))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.runSudo("/opt/zapret2/zapret2-menu-helper reinstall")
+            DispatchQueue.main.async {
+                self.setBusyStatus(nil)
+                if result.success {
+                    self.showNotification(self.text("applyCurrentUpdateFinished"))
+                } else {
+                    self.showCommandError(result.output)
+                }
+                self.rebuildMenu()
+            }
+        }
+    }
+
+    @objc private func fullUpdate() {
+        guard confirm(text("fullUpdateConfirm"), title: "Zapret2") else {
+            rebuildMenu()
+            return
+        }
+
+        let result = runSudo("/opt/zapret2/zapret2-menu-helper update-all")
+        if result.success {
+            showNotification(text("fullUpdateFinished"))
+        } else {
+            showCommandError(result.output)
+        }
         rebuildMenu()
     }
 
+    @objc private func checkConnection() {
+        setBusyStatus(text("checkingConnection"))
+        showNotification(text("checkingConnection"))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let backendTraffic = self.nativeBackendTrafficStatus()
+            let internet = self.isInternetReachable()
+            let apple = self.isEndpointReachable("https://www.apple.com")
+            let youtube = self.isEndpointReachable("https://www.youtube.com")
+            let discord = self.isEndpointReachable("https://discord.com/")
+            let discordAuth = self.isEndpointReachable("https://discord.com/api/v9/experiments")
+            let discordGateway = self.isTcpEndpointReachable(host: "gateway.discord.gg", port: 443)
+            let discordMedia = self.isDiscordMediaReady(nativeBackendReady: backendTraffic.ready)
+            let report = self.connectionReport(
+                internet: internet,
+                apple: apple,
+                youtube: youtube,
+                nativeBackendReady: backendTraffic.ready,
+                discord: discord,
+                discordAuth: discordAuth,
+                discordGateway: discordGateway,
+                discordMedia: discordMedia
+            )
+            DispatchQueue.main.async {
+                self.setBusyStatus(nil)
+                self.showDialog(report, title: "Zapret2")
+                self.rebuildMenu()
+            }
+        }
+    }
+
     @objc private func showStatus() {
-        showDialog(statusReport(), title: "Zapret2")
+        setBusyStatus(text("checkingStatus"))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let report = self.statusReport()
+            DispatchQueue.main.async {
+                self.setBusyStatus(nil)
+                self.showDialog(report, title: "Zapret2")
+                self.rebuildMenu()
+            }
+        }
+    }
+
+    @objc private func selectProfile(_ sender: NSMenuItem) {
+        guard let profile = sender.representedObject as? String else {
+            return
+        }
+
+        let result = runSudo("/opt/zapret2/zapret2-menu-helper set-profile \(shellEscape(profile))")
+        if result.success {
+            showNotification("\(text("profileChanged")) \(profile)")
+        } else {
+            showCommandError(result.output)
+        }
         rebuildMenu()
     }
 
@@ -331,9 +518,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func showCommandError(_ output: String) {
         if output.contains("a password is required") || output.contains("not in the sudoers") {
-            showDialog(text("passwordlessSetupMissing"), title: text("errorTitle"))
+            showErrorDialog(text("passwordlessSetupMissing"))
         } else {
-            showDialog(output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? text("commandFailed") : output, title: text("errorTitle"))
+            showErrorDialog(output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? text("commandFailed") : output)
         }
     }
 
@@ -410,7 +597,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func zapretStartedAt() -> String {
         let output = runShell("""
-        pid=$(/usr/bin/pgrep -f '^/opt/zapret2/tpws/tpws' | /usr/bin/head -n 1)
+        pid=$(/usr/bin/pgrep -f '^/opt/zapret2/bin/zapret2-utun-runtime' | /usr/bin/head -n 1)
         if [ -n "$pid" ]; then /bin/ps -o lstart= -p "$pid"; fi
         """).trimmingCharacters(in: .whitespacesAndNewlines)
         return output.isEmpty ? text("unknown") : output
@@ -418,7 +605,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func zapretRuntime() -> String {
         let output = runShell("""
-        pid=$(/usr/bin/pgrep -f '^/opt/zapret2/tpws/tpws' | /usr/bin/head -n 1)
+        pid=$(/usr/bin/pgrep -f '^/opt/zapret2/bin/zapret2-utun-runtime' | /usr/bin/head -n 1)
         if [ -n "$pid" ]; then /bin/ps -o etimes= -p "$pid" | /usr/bin/xargs; fi
         """).trimmingCharacters(in: .whitespacesAndNewlines)
         if let seconds = TimeInterval(output) {
@@ -449,6 +636,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return text("unknown")
         }
         return formatDate(Date(timeIntervalSince1970: timestamp))
+    }
+
+    private func nativeProfileStatus() -> String {
+        let result = runSudo("/opt/zapret2/zapret2-menu-helper profile")
+        if result.success {
+            return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text("statusUnavailable")
+    }
+
+    private func nativeBackendStatus() -> String {
+        let result = runSudo("/opt/zapret2/zapret2-menu-helper status")
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return output.isEmpty ? text("statusUnavailable") : output
+    }
+
+    private func nativeProfiles() -> [(name: String, selected: Bool)] {
+        let result = runSudo("/opt/zapret2/zapret2-menu-helper profiles")
+        guard result.success else {
+            return []
+        }
+
+        return result.output
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line in
+                let text = String(line)
+                if text.hasPrefix("* ") {
+                    return (String(text.dropFirst(2)), true)
+                }
+                if text.hasPrefix("  ") {
+                    return (String(text.dropFirst(2)), false)
+                }
+                return nil
+            }
     }
 
     private func formatDate(_ date: Date) -> String {
@@ -482,6 +703,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         \(runtimeLine)
 
+        \(text("nativeProfileBlock"))
+        \(nativeProfileStatus())
+
+        \(text("nativeBackendBlock"))
+        \(nativeBackendStatus())
+
         \(text("listsBlock"))
         \(text("lastListUpdate")) \(hostlistModifiedTime())
         \(text("mainListSize")) \(hostlistLineCount()) \(text("lines"))
@@ -497,13 +724,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         """
     }
 
-    private func connectionReport(internet: Bool, apple: Bool, youtube: Bool, discord: Bool) -> String {
+    private func connectionReport(internet: Bool, apple: Bool, youtube: Bool, nativeBackendReady: Bool, discord: Bool, discordAuth: Bool, discordGateway: Bool, discordMedia: Bool) -> String {
         """
         \(text("connectionReportTitle"))
         \(text("internetStatus")) \(checkMark(internet))
         Apple: \(checkMark(apple))
         YouTube: \(checkMark(youtube))
-        Discord: \(checkMark(discord))
+        \(text("discordBypassBackend")) \(checkMark(nativeBackendReady))
+        \(text("discordWeb")) \(checkMark(discord))
+        \(text("discordAuthApi")) \(checkMark(discordAuth))
+        \(text("discordGateway")) \(checkMark(discordGateway))
+        \(text("discordVoiceMedia")) \(checkMark(discordMedia))
+        \(text("discordVoiceMediaHint"))
         """
     }
 
@@ -515,6 +747,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         """
         \(text("aboutTitle"))
 
+        \(text("aboutMacbookVersion")) \(macbookVersion)
         \(text("aboutDate")) \(formatDateOnly(Date()))
         \(text("aboutAppUpdated")) \(appModifiedDate())
         \(text("aboutListsUpdated")) \(hostlistModifiedDate())
@@ -527,6 +760,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         \(text("aboutRestart"))
         \(text("aboutConnection"))
         \(text("aboutUpdate"))
+        \(text("aboutApplyUpdate"))
+        \(text("aboutFullUpdate"))
         \(text("aboutQuit"))
         """
     }
@@ -560,6 +795,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    private func showErrorDialog(_ message: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = text("errorTitle")
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: text("copyErrorText"))
+
+        if alert.runModal() == .alertSecondButtonReturn {
+            copyToClipboard(message)
+            showNotification(text("errorTextCopied"))
+        }
+    }
+
+    private func copyToClipboard(_ value: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
+    }
+
+    private func confirm(_ message: String, title: String) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: text("continue"))
+        alert.addButton(withTitle: text("cancel"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func showNotification(_ message: String) {
@@ -596,7 +861,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             "start": "📳 Запустить",
             "stop": "📴 Остановить",
             "restart": "🔀 Перезапустить",
+            "nativeProfileMenu": "🎛 Native профиль",
             "updateHostlist": "🔂 Обновить список",
+            "applyCurrentUpdate": "♻️ Применить текущую версию",
+            "fullUpdate": "⬇️ Обновить полностью",
             "checkConnection": "📶 Проверить соединение",
             "showStatus": "▶ Показать статус",
             "about": "ℹ️ О программе",
@@ -609,13 +877,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             "stopped": "Zapret2 остановлен",
             "restarted": "Zapret2 перезапущен",
             "hostlistUpdated": "Список обновлён",
-            "restartUnavailable": "Перезапуск доступен только когда zapret2 compatibility backend уже запущен. Сейчас соединение выключено.",
+            "applyCurrentUpdateFinished": "Текущая версия применена. Программа будет перезапущена.",
+            "fullUpdateFinished": "Полное обновление завершено. Программа будет перезапущена.",
+            "applyCurrentUpdateConfirm": "Текущая сборка из рабочего репозитория будет пересобрана и установлена поверх текущей версии. Git обновление выполняться не будет.",
+            "fullUpdateConfirm": "Будут загружены новые изменения из исходного репозитория, затем приложение и runtime будут переустановлены. После обновления меню Zapret2 перезапустится.",
+            "restartUnavailable": "Перезапуск доступен только когда native zapret2 backend уже запущен. Сейчас соединение выключено.",
             "restartNoInternet": "Перезапуск заблокирован: интернет-соединение не проходит проверку.",
             "zapretRunningLine": "Zapret2: запущен",
             "zapretStoppedLine": "Zapret2: остановлен",
             "mainHostlist": "Основной список:",
             "userHostlist": "Пользовательский список:",
-            "humanRunning": "📳 Zapret2 включён. Соединение сейчас работает через правила zapret2 compatibility.",
+            "humanRunning": "📳 Zapret2 включён. Соединение сейчас должно работать через native zapret2 backend.",
             "humanStopped": "📴 Zapret2 выключен. Дополнительные правила обхода сейчас не применяются.",
             "humanRestarting": "🔀 Zapret2 перезапускается. Подождите несколько секунд, пока правила применятся заново.",
             "internetReachable": "📶 Интернет доступен: проверка соединения проходит.",
@@ -624,15 +896,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             "runningFor": "Работает уже:",
             "lastStoppedAt": "Последняя остановка:",
             "stoppedFor": "Выключен уже:",
+            "nativeProfileBlock": "Native профиль:",
+            "nativeBackendBlock": "Native backend:",
             "listsBlock": "Списки обхода:",
             "mainListSize": "Основной список:",
             "userListSize": "Ваш ручной список:",
             "startupBlock": "Автозапуск:",
             "menuAutostart": "• меню Zapret2 запускается вместе с macOS",
-            "zapretNoAutostart": "• сам zapret2 compatibility backend после перезагрузки остаётся выключенным",
+            "zapretNoAutostart": "• сам native zapret2 backend после перезагрузки остаётся выключенным",
             "actionsBlock": "Действия:",
-            "restartAvailable": "• 🔀 Перезапуск доступен, потому что zapret2 compatibility backend включён",
-            "restartBlocked": "• 🔀 Перезапуск заблокирован: zapret2 compatibility backend выключен или нет интернет-соединения",
+            "restartAvailable": "• 🔀 Перезапуск доступен, потому что native zapret2 backend включён",
+            "restartBlocked": "• 🔀 Перезапуск заблокирован: native zapret2 backend выключен или нет интернет-соединения",
             "connectionCheckHint": "• 📶 Проверка соединения проверяет доступность интернета, а не включает zapret2",
             "startedAt": "Запущен:",
             "notRunning": "не запущен",
@@ -651,33 +925,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             "errorTitle": "Ошибка Zapret",
             "passwordlessSetupMissing": "Нет разрешения запускать zapret2 без пароля. Нужно один раз настроить правило sudoers.",
             "languageChanged": "Язык интерфейса переключён",
+            "profileChanged": "Native профиль выбран:",
             "internetOk": "Интернет доступен.",
+            "startingBackend": "Запускаю backend...",
+            "stoppingBackend": "Останавливаю backend...",
+            "checkingConnection": "Проверяю соединение...",
+            "checkingStatus": "Проверяю статус...",
+            "applyingUpdate": "Применяю обновление...",
             "connectionReportTitle": "Проверка соединения:",
             "internetStatus": "Интернет:",
             "reachable": "доступен",
             "unreachable": "недоступен",
             "internetFailTitle": "Интернет недоступен",
             "internetFailMessage": "Не удалось подключиться к проверочным адресам. Можно остановить zapret2 или закрыть окно и проверить Wi‑Fi/VPN/DNS вручную.",
-            "aboutTitle": "Zapret2 Menu — управление zapret2 compatibility backend из верхнего меню macOS.",
+            "aboutTitle": "Zapret2 Menu — управление native zapret2 backend из верхнего меню macOS.",
+            "aboutMacbookVersion": "Версия для MacBook:",
             "aboutDate": "Текущая дата:",
             "aboutAppUpdated": "Последнее обновление программы:",
             "aboutListsUpdated": "Последнее обновление списков доступа:",
-            "aboutWhat": "Приложение управляет локальным zapret2 compatibility backend: запускает, останавливает, перезапускает сервис и обновляет списки обхода.",
+            "aboutWhat": "Приложение управляет локальным native zapret2 backend: запускает, останавливает, перезапускает сервис и показывает диагностику обхода.",
             "aboutHowToUse": "Как пользоваться:",
-            "aboutStart": "• 📳 Запустить — включает zapret2 compatibility backend.",
+            "aboutStart": "• 📳 Запустить — включает native zapret2 backend.",
             "aboutStop": "• 📴 Остановить — выключает zapret2 и очищает правила.",
             "aboutRestart": "• 🔀 Перезапустить — доступно только когда zapret2 уже включён и интернет проходит проверку.",
-            "aboutConnection": "• 📶 Проверить соединение — показывает статусы интернета, Apple, YouTube и Discord.",
+            "aboutConnection": "• 📶 Проверить соединение — показывает статусы интернета, Apple, YouTube, Discord Web, Discord Gateway и готовность voice/media.",
             "aboutUpdate": "• 🔂 Обновить список — скачивает свежий список доменов обхода.",
+            "aboutApplyUpdate": "• ♻️ Применить текущую версию — переустанавливает уже скачанную сборку без git обновления.",
+            "aboutFullUpdate": "• ⬇️ Обновить полностью — подтягивает новые изменения программы, переустанавливает её и перезапускает меню.",
             "aboutQuit": "• ✖ Выключить программу — сначала останавливает zapret2, затем закрывает меню.",
-            "close": "Закрыть"
+            "close": "Закрыть",
+            "continue": "Продолжить",
+            "cancel": "Отмена",
+            "copyErrorText": "Скопировать текст ошибки",
+            "errorTextCopied": "Текст ошибки скопирован",
+            "discordBypassBackend": "Discord bypass/backend:",
+            "discordWeb": "Discord Web:",
+            "discordAuthApi": "Discord Auth/API:",
+            "discordGateway": "Discord Gateway:",
+            "discordVoiceMedia": "Discord Voice/Media UDP:",
+            "discordVoiceMediaHint": "Если bypass/backend недоступен, зелёные Discord Web/Auth/Gateway означают только прямую доступность endpoint, а не работающий обход приложения.",
+            "nativeBackendRequired": "требуется native zapret2 backend"
         ]
 
         let en: [String: String] = [
             "start": "📳 Start",
             "stop": "📴 Stop",
             "restart": "🔀 Restart",
+            "nativeProfileMenu": "🎛 Native Profile",
             "updateHostlist": "🔂 Update Hostlist",
+            "applyCurrentUpdate": "♻️ Apply Current Version",
+            "fullUpdate": "⬇️ Full Update",
             "checkConnection": "📶 Check Connection",
             "showStatus": "▶ Show Status",
             "about": "ℹ️ About",
@@ -690,13 +987,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             "stopped": "Zapret2 stopped",
             "restarted": "Zapret2 restarted",
             "hostlistUpdated": "Hostlist updated",
-            "restartUnavailable": "Restart is only available when the zapret2 compatibility backend is already running. The connection is currently off.",
+            "applyCurrentUpdateFinished": "Current version applied. The app will restart.",
+            "fullUpdateFinished": "Full update completed. The app will restart.",
+            "applyCurrentUpdateConfirm": "The current build from this working repository will be rebuilt and installed over the current version. Git update will not run.",
+            "fullUpdateConfirm": "New changes will be fetched from the upstream repository, then the app and runtime will be reinstalled. Zapret2 Menu will restart after the update.",
+            "restartUnavailable": "Restart is only available when the native zapret2 backend is already running. The connection is currently off.",
             "restartNoInternet": "Restart is blocked: the internet connection check is failing.",
             "zapretRunningLine": "Zapret2: running",
             "zapretStoppedLine": "Zapret2: stopped",
             "mainHostlist": "Main hostlist:",
             "userHostlist": "User hostlist:",
-            "humanRunning": "📳 Zapret2 is on. The connection is currently using zapret2 compatibility rules.",
+            "humanRunning": "📳 Zapret2 is on. The connection should be using the native zapret2 backend.",
             "humanStopped": "📴 Zapret2 is off. Bypass rules are not applied right now.",
             "humanRestarting": "🔀 Zapret2 is restarting. Wait a few seconds while the rules are applied again.",
             "internetReachable": "📶 Internet is reachable: connection check passes.",
@@ -705,14 +1006,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             "runningFor": "Running for:",
             "lastStoppedAt": "Last stopped:",
             "stoppedFor": "Stopped for:",
+            "nativeProfileBlock": "Native profile:",
+            "nativeBackendBlock": "Native backend:",
             "listsBlock": "Bypass lists:",
             "mainListSize": "Main list:",
             "userListSize": "Your manual list:",
             "startupBlock": "Startup:",
             "menuAutostart": "• Zapret2 Menu starts with macOS",
-            "zapretNoAutostart": "• the zapret2 compatibility backend stays off after reboot",
+            "zapretNoAutostart": "• the native zapret2 backend stays off after reboot",
             "actionsBlock": "Actions:",
-            "restartAvailable": "• 🔀 Restart is available because the zapret2 compatibility backend is on",
+            "restartAvailable": "• 🔀 Restart is available because the native zapret2 backend is on",
             "restartBlocked": "• 🔀 Restart is blocked: zapret2 is off or internet is unavailable",
             "connectionCheckHint": "• 📶 Check Connection verifies internet reachability; it does not turn zapret2 on",
             "startedAt": "Started at:",
@@ -732,26 +1035,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             "errorTitle": "Zapret2 Error",
             "passwordlessSetupMissing": "No permission to run zapret2 without a password. Configure the sudoers rule once.",
             "languageChanged": "Interface language switched",
+            "profileChanged": "Native profile selected:",
             "internetOk": "Internet is available.",
+            "startingBackend": "Starting backend...",
+            "stoppingBackend": "Stopping backend...",
+            "checkingConnection": "Checking connection...",
+            "checkingStatus": "Checking status...",
+            "applyingUpdate": "Applying update...",
             "connectionReportTitle": "Connection check:",
             "internetStatus": "Internet:",
             "reachable": "reachable",
             "unreachable": "unreachable",
             "internetFailTitle": "Internet unavailable",
             "internetFailMessage": "The test addresses are unreachable. You can stop zapret2 or close this window and check Wi-Fi/VPN/DNS manually.",
-            "aboutTitle": "Zapret2 Menu — control the zapret2 compatibility backend from the macOS menu bar.",
+            "aboutTitle": "Zapret2 Menu — control the native zapret2 backend from the macOS menu bar.",
+            "aboutMacbookVersion": "MacBook version:",
             "aboutDate": "Current date:",
             "aboutAppUpdated": "Last app update:",
             "aboutListsUpdated": "Last access list update:",
-            "aboutWhat": "The app controls the local zapret2 compatibility backend: start, stop, restart, and hostlist update.",
+            "aboutWhat": "The app controls the local native zapret2 backend: start, stop, restart, and bypass diagnostics.",
             "aboutHowToUse": "How to use:",
             "aboutStart": "• 📳 Start — turns zapret2 on.",
             "aboutStop": "• 📴 Stop — turns zapret2 off and clears rules.",
             "aboutRestart": "• 🔀 Restart — available only when zapret2 is already on and the internet check passes.",
-            "aboutConnection": "• 📶 Check Connection — shows internet, Apple, YouTube, and Discord statuses.",
+            "aboutConnection": "• 📶 Check Connection — shows internet, Apple, YouTube, Discord Web, Discord Gateway, and voice/media readiness.",
             "aboutUpdate": "• 🔂 Update Hostlist — downloads a fresh bypass domain list.",
+            "aboutApplyUpdate": "• ♻️ Apply Current Version — reinstalls the already downloaded build without git update.",
+            "aboutFullUpdate": "• ⬇️ Full Update — pulls new app changes, reinstalls the app, and restarts the menu.",
             "aboutQuit": "• ✖ Quit — stops zapret2 first, then closes the menu app.",
-            "close": "Close"
+            "close": "Close",
+            "continue": "Continue",
+            "cancel": "Cancel",
+            "copyErrorText": "Copy Error Text",
+            "errorTextCopied": "Error text copied",
+            "discordBypassBackend": "Discord bypass/backend:",
+            "discordWeb": "Discord Web:",
+            "discordAuthApi": "Discord Auth/API:",
+            "discordGateway": "Discord Gateway:",
+            "discordVoiceMedia": "Discord Voice/Media UDP:",
+            "discordVoiceMediaHint": "If bypass/backend is unavailable, green Discord Web/Auth/Gateway checks only mean direct endpoint reachability, not working app traffic bypass.",
+            "nativeBackendRequired": "native zapret2 backend required"
         ]
 
         let dictionary = effectiveLanguage() == .ru ? ru : en

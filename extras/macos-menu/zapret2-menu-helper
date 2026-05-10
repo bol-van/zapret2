@@ -2,20 +2,322 @@
 set -eu
 
 ZAPRET_BASE=${ZAPRET_BASE:-/opt/zapret2}
-TPWS_PATTERN="^$ZAPRET_BASE/tpws/tpws"
+METADATA_FILE="$ZAPRET_BASE/zapret2-menu.env"
+BACKEND="$ZAPRET_BASE/bin/zapret2-mac-backend"
+BACKEND_PATTERN="^$BACKEND"
+LEGACY_TPWS_PATTERN="^$ZAPRET_BASE/tpws/tpws"
+LEGACY_INIT="$ZAPRET_BASE/init.d/macos/zapret"
+LEGACY_CONFIG="$ZAPRET_BASE/config.legacy-tpws"
+USER_HOSTLIST="$ZAPRET_BASE/ipset/zapret-hosts-user.txt"
+USER_EXCLUDE_HOSTLIST="$ZAPRET_BASE/ipset/zapret-hosts-user-exclude.txt"
+IP_EXCLUDE_LIST="$ZAPRET_BASE/ipset/zapret-ip-exclude.txt"
+DISCORD_GATEWAY_IPSET="$ZAPRET_BASE/ipset/discord-gateway-ipset.txt"
+DISCORD_FAST_TLS_DOMAINS="discord.com,discord.gg,discordapp.com,discordapp.net,discord.media,cdn.discordapp.com,media.discordapp.net,latency.discord.media,stable.dl2.discordapp.net"
 
-matching_tpws_pids() {
-  /usr/bin/pgrep -f "$TPWS_PATTERN" 2>/dev/null || true
+active_user() {
+  if [ -n "${DISCORD_SETTINGS_USER:-}" ]; then
+    echo "$DISCORD_SETTINGS_USER"
+    return 0
+  fi
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+    echo "$SUDO_USER"
+    return 0
+  fi
+  /usr/bin/stat -f "%Su" /dev/console
 }
 
-stop_tpws() {
-  pids=$(matching_tpws_pids)
+home_for_user() {
+  user="$1"
+  home=$(/usr/bin/dscl . -read "/Users/$user" NFSHomeDirectory 2>/dev/null | /usr/bin/awk '{print $2}')
+  if [ -n "$home" ]; then
+    echo "$home"
+  else
+    echo "/Users/$user"
+  fi
+}
+
+run_backend() {
+  if [ -f "$METADATA_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$METADATA_FILE"
+  fi
+  ZAPRET_BASE="$ZAPRET_BASE" \
+    ZAPRET_BACKEND_MODE="${ZAPRET_BACKEND_MODE:-utun}" \
+    ZAPRET_TUNNEL_PROVIDER_BUNDLE_ID="${ZAPRET_TUNNEL_PROVIDER_BUNDLE_ID:-}" \
+    "$BACKEND" "$@"
+}
+
+matching_backend_pids() {
+  /usr/bin/pgrep -f "$BACKEND_PATTERN" 2>/dev/null || true
+}
+
+matching_legacy_tpws_pids() {
+  /usr/bin/pgrep -f "$LEGACY_TPWS_PATTERN" 2>/dev/null || true
+}
+
+clear_legacy_pf_anchors() {
+  /sbin/pfctl -qa zapret2-v4 -F all 2>/dev/null || true
+  /sbin/pfctl -qa zapret2-v6 -F all 2>/dev/null || true
+  /sbin/pfctl -qa zapret2 -F all 2>/dev/null || true
+}
+
+refresh_legacy_pf_tables() {
+  [ -f /etc/pf.anchors/zapret2 ] && /sbin/pfctl -qTl -a zapret2 -f /etc/pf.anchors/zapret2 2>/dev/null || true
+  [ -f /etc/pf.anchors/zapret2-v4 ] && /sbin/pfctl -qTl -a zapret2-v4 -f /etc/pf.anchors/zapret2-v4 2>/dev/null || true
+  [ -f /etc/pf.anchors/zapret2-v6 ] && /sbin/pfctl -qTl -a zapret2-v6 -f /etc/pf.anchors/zapret2-v6 2>/dev/null || true
+}
+
+stop_backend_processes() {
+  pids=$(matching_backend_pids)
   if [ -n "$pids" ]; then
     /bin/kill $pids 2>/dev/null || true
     /bin/sleep 1
-    pids=$(matching_tpws_pids)
+    pids=$(matching_backend_pids)
     [ -z "$pids" ] || /bin/kill -9 $pids 2>/dev/null || true
   fi
+}
+
+stop_legacy_tpws_processes() {
+  if [ -x "$LEGACY_INIT" ]; then
+    ZAPRET_CONFIG="$LEGACY_CONFIG" "$LEGACY_INIT" stop-fw 2>/dev/null || true
+    ZAPRET_CONFIG="$LEGACY_CONFIG" "$LEGACY_INIT" stop 2>/dev/null || true
+  fi
+  clear_legacy_pf_anchors
+
+  pids=$(matching_legacy_tpws_pids)
+  if [ -n "$pids" ]; then
+    /bin/kill $pids 2>/dev/null || true
+    /bin/sleep 1
+    pids=$(matching_legacy_tpws_pids)
+    [ -z "$pids" ] || /bin/kill -9 $pids 2>/dev/null || true
+  fi
+}
+
+reset_network_state() {
+  run_backend stop 2>/dev/null || true
+  stop_backend_processes
+  stop_legacy_tpws_processes
+  echo "zapret2 network state was reset"
+}
+
+ensure_legacy_discord_gateway_strategy() {
+  [ -f "$LEGACY_CONFIG" ] || return 0
+  [ -x /usr/bin/python3 ] || return 0
+  /usr/bin/python3 - "$LEGACY_CONFIG" "$USER_EXCLUDE_HOSTLIST" "$DISCORD_GATEWAY_IPSET" <<'PY'
+import sys
+
+path = sys.argv[1]
+exclude_path = sys.argv[2]
+gateway_ipset = sys.argv[3]
+text = open(path, "r", encoding="utf-8").read()
+
+gateway_domains = ",".join([
+    "gateway.discord.gg",
+    "gateway-us-east1-a.discord.gg",
+    "gateway-us-east1-b.discord.gg",
+    "gateway-us-east1-c.discord.gg",
+    "gateway-us-east1-d.discord.gg",
+    "gateway-us-west1-a.discord.gg",
+    "gateway-us-west1-b.discord.gg",
+    "gateway-us-west1-c.discord.gg",
+])
+fast_tls_domains = ",".join([
+    "discord.com",
+    "discord.gg",
+    "discordapp.com",
+    "discordapp.net",
+    "discord.media",
+    "updates.discord.com",
+    "static.discord.com",
+    "static-edge.discord.com",
+    "cdn.discordapp.com",
+    "media.discordapp.net",
+    "latency.discord.media",
+    "stable.dl2.discordapp.net",
+    "discordstatus.com",
+    "status.discord.com",
+])
+gateway_passthrough_strategy = f"--filter-tcp=443 --tlsrec=sniext+1 --ipset={gateway_ipset} --new"
+fast_tls_strategy = f"--filter-tcp=443 --tlsrec=sniext+1 --hostlist-domains={fast_tls_domains} --new"
+tcp_strategy = "--filter-tcp=443 --split-pos=1,midsld --disorder <HOSTLIST>"
+http_strategy = "--filter-tcp=80 --methodeol <HOSTLIST> --new"
+
+def replace_assignment(source, name, next_name):
+    start = source.find(f"{name}=")
+    next_start = source.find(f"\n{next_name}=", start)
+    if start == -1 or next_start == -1:
+        return source
+    block = (
+        f'{name}="\n'
+        f'{gateway_passthrough_strategy}\n'
+        f'{fast_tls_strategy}\n'
+        f'{http_strategy}\n'
+        f'{tcp_strategy}\n'
+        f'"\n'
+    )
+    return source[:start] + block + source[next_start + 1:]
+
+text = replace_assignment(text, "TPWS_SOCKS_OPT", "TPWS_ENABLE")
+text = replace_assignment(text, "TPWS_OPT", "NFQWS_ENABLE")
+with open(path, "w", encoding="utf-8") as file:
+    file.write(text)
+PY
+}
+
+start_legacy_fallback() {
+  [ "${ZAPRET_DISABLE_LEGACY_FALLBACK:-0}" = "1" ] && return 0
+  [ -x "$LEGACY_INIT" ] || return 0
+  [ -f "$LEGACY_CONFIG" ] || return 0
+  ensure_legacy_discord_gateway_strategy
+  if [ -n "$(matching_legacy_tpws_pids)" ]; then
+    echo "legacy tpws fallback is already running"
+    return 0
+  fi
+  echo "starting legacy tpws fallback for TCP/YouTube compatibility"
+  ZAPRET_CONFIG="$LEGACY_CONFIG" "$LEGACY_INIT" start
+}
+
+fix_discord_startup_hosts() {
+  /bin/mkdir -p "$ZAPRET_BASE/ipset"
+  /usr/bin/touch "$USER_HOSTLIST"
+  /bin/cat >"$USER_EXCLUDE_HOSTLIST" <<'EOF'
+gateway.discord.gg
+gateway-us-east1-a.discord.gg
+gateway-us-east1-b.discord.gg
+gateway-us-east1-c.discord.gg
+gateway-us-east1-d.discord.gg
+gateway-us-west1-a.discord.gg
+gateway-us-west1-b.discord.gg
+gateway-us-west1-c.discord.gg
+EOF
+  for host in \
+    discord.com \
+    discord.gg \
+    discordapp.com \
+    discordapp.net \
+    discord.media \
+    updates.discord.com \
+    static.discord.com \
+    static-edge.discord.com \
+    discordstatus.com \
+    status.discord.com \
+    stable.dl2.discordapp.net \
+    cdn.discordapp.com \
+    media.discordapp.net \
+    latency.discord.media \
+    challenges.cloudflare.com \
+    hcaptcha.com
+  do
+    /usr/bin/grep -qx "$host" "$USER_HOSTLIST" 2>/dev/null || echo "$host" >>"$USER_HOSTLIST"
+  done
+  /bin/cat >"$IP_EXCLUDE_LIST" <<'EOF'
+10.0.0.0/8
+100.64.0.0/10
+127.0.0.0/8
+169.254.0.0/16
+172.16.0.0/12
+192.168.0.0/16
+EOF
+  /bin/rm -f "$DISCORD_GATEWAY_IPSET"
+  for host in \
+    gateway.discord.gg \
+    gateway-us-east1-a.discord.gg \
+    gateway-us-east1-b.discord.gg \
+    gateway-us-east1-c.discord.gg \
+    gateway-us-east1-d.discord.gg \
+    gateway-us-west1-a.discord.gg \
+    gateway-us-west1-b.discord.gg \
+    gateway-us-west1-c.discord.gg
+  do
+    if command -v /usr/bin/dig >/dev/null 2>&1; then
+      /usr/bin/dig +short "$host" | /usr/bin/awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print }'
+    else
+      /usr/bin/dscacheutil -q host -a name "$host" 2>/dev/null | /usr/bin/awk '/ip_address:/ { print $2 }'
+    fi
+  done | /usr/bin/sort -u >"$DISCORD_GATEWAY_IPSET"
+
+  if [ -n "$(matching_legacy_tpws_pids)" ]; then
+    stop_legacy_tpws_processes
+  fi
+  start_legacy_fallback
+  refresh_legacy_pf_tables
+  echo "discord startup hosts are installed in $USER_HOSTLIST"
+  echo "local/private ip ranges are excluded from pf in $IP_EXCLUDE_LIST"
+  echo "discord gateway ipset is installed in $DISCORD_GATEWAY_IPSET"
+}
+
+fix_discord_desktop_settings() {
+  user=$(active_user)
+  home=$(home_for_user "$user")
+  settings_dir="$home/Library/Application Support/discord"
+  settings_file="$settings_dir/settings.json"
+
+  /bin/mkdir -p "$settings_dir"
+  /usr/bin/chflags nouchg "$settings_file" 2>/dev/null || true
+  if [ -x /usr/bin/python3 ]; then
+    /usr/bin/python3 - "$settings_file" <<'PY'
+import json
+import os
+import sys
+import time
+
+path = sys.argv[1]
+data = {}
+if os.path.exists(path):
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+    except Exception:
+        backup = f"{path}.backup-{time.strftime('%Y%m%d-%H%M%S')}"
+        os.rename(path, backup)
+
+data["USE_NEW_UPDATER"] = False
+data["SKIP_HOST_UPDATE"] = True
+data["SKIP_MODULE_UPDATE"] = True
+
+with open(path, "w", encoding="utf-8") as file:
+    json.dump(data, file, indent=2)
+    file.write("\n")
+PY
+  else
+    if [ ! -f "$settings_file" ]; then
+      printf '{\n  "USE_NEW_UPDATER": false,\n  "SKIP_HOST_UPDATE": true,\n  "SKIP_MODULE_UPDATE": true\n}\n' >"$settings_file"
+    else
+      echo "python3 is required to update existing Discord settings safely: $settings_file" >&2
+      exit 70
+    fi
+  fi
+  /usr/sbin/chown "$user":staff "$settings_file" 2>/dev/null || true
+  echo "discord desktop updater bypass is installed in $settings_file"
+}
+
+reset_discord_volatile_cache() {
+  user=$(active_user)
+  home=$(home_for_user "$user")
+  discord_dir="$home/Library/Application Support/discord"
+  stamp=$(/bin/date +%Y%m%d-%H%M%S)
+  backup_dir="$discord_dir/startup-cache-backup-$stamp"
+
+  /usr/bin/pkill -x Discord 2>/dev/null || true
+  /bin/sleep 2
+  /bin/mkdir -p "$backup_dir"
+  for item in \
+    "Session Storage" \
+    "Cache" \
+    "Code Cache" \
+    "GPUCache" \
+    "DawnGraphiteCache" \
+    "DawnWebGPUCache" \
+    "Network Persistent State" \
+    "TransportSecurity" \
+    "blob_storage"
+  do
+    if [ -e "$discord_dir/$item" ]; then
+      /bin/mv "$discord_dir/$item" "$backup_dir/" 2>/dev/null || true
+    fi
+  done
+  /usr/sbin/chown -R "$user":staff "$backup_dir" 2>/dev/null || true
+  echo "discord volatile startup cache moved to $backup_dir"
 }
 
 prepare_runtime_dirs() {
@@ -23,27 +325,120 @@ prepare_runtime_dirs() {
 }
 
 require_runtime() {
-  [ -x "$ZAPRET_BASE/init.d/macos/zapret" ] || {
-    echo "zapret2 macOS compatibility runtime is missing at $ZAPRET_BASE." >&2
+  [ -x "$BACKEND" ] || {
+    echo "zapret2 native macOS backend is missing at $BACKEND." >&2
     echo "Run extras/macos-menu/install.sh first." >&2
     exit 70
   }
+}
+
+load_metadata() {
+  [ -f "$METADATA_FILE" ] || {
+    echo "zapret2 menu metadata is missing at $METADATA_FILE." >&2
+    echo "Run extras/macos-menu/install.sh once from the repository checkout." >&2
+    exit 70
+  }
+  # shellcheck disable=SC1090
+  . "$METADATA_FILE"
+  : "${ZAPRET_MENU_UPSTREAM_URL:=https://github.com/bol-van/zapret2.git}"
+  : "${ZAPRET_MENU_FORK_URL:=https://github.com/pitk150-alt/zapret2.git}"
+  : "${ZAPRET_MENU_BRANCH:=feature/macos-menu-controller}"
+}
+
+run_as_install_user() {
+  /usr/bin/sudo -u "$ZAPRET_MENU_INSTALL_USER" HOME="$ZAPRET_MENU_INSTALL_HOME" "$@"
+}
+
+current_source_branch() {
+  run_as_install_user /usr/bin/git -C "$ZAPRET_MENU_SOURCE_DIR" branch --show-current
+}
+
+reinstall_current() {
+  load_metadata
+
+  [ -x "$ZAPRET_MENU_SOURCE_DIR/extras/macos-menu/install.sh" ] || {
+    echo "Installer is missing: $ZAPRET_MENU_SOURCE_DIR/extras/macos-menu/install.sh" >&2
+    exit 70
+  }
+
+  ZAPRET_BASE="$ZAPRET_MENU_ZAPRET_BASE" \
+  INSTALL_USER="$ZAPRET_MENU_INSTALL_USER" \
+  INSTALL_DIR="$ZAPRET_MENU_INSTALL_DIR" \
+  UPSTREAM_URL="$ZAPRET_MENU_UPSTREAM_URL" \
+  FORK_URL="$ZAPRET_MENU_FORK_URL" \
+  BRANCH="$ZAPRET_MENU_BRANCH" \
+    "$ZAPRET_MENU_SOURCE_DIR/extras/macos-menu/install.sh"
+}
+
+require_clean_repo() {
+  run_as_install_user /usr/bin/git -C "$ZAPRET_MENU_SOURCE_DIR" diff --quiet || {
+    echo "Repository has unstaged changes. Commit, stash, or discard them before a full update." >&2
+    exit 75
+  }
+  run_as_install_user /usr/bin/git -C "$ZAPRET_MENU_SOURCE_DIR" diff --cached --quiet || {
+    echo "Repository has staged changes. Commit, stash, or unstage them before a full update." >&2
+    exit 75
+  }
+  [ -z "$(run_as_install_user /usr/bin/git -C "$ZAPRET_MENU_SOURCE_DIR" ls-files --others --exclude-standard)" ] || {
+    echo "Repository has untracked files. Commit, stash, or remove them before a full update." >&2
+    exit 75
+  }
+}
+
+full_update() {
+  load_metadata
+
+  [ -d "$ZAPRET_MENU_SOURCE_DIR/.git" ] || {
+    echo "Source directory is not a git repository: $ZAPRET_MENU_SOURCE_DIR" >&2
+    exit 70
+  }
+  [ -x "$ZAPRET_MENU_SOURCE_DIR/extras/macos-menu/install.sh" ] || {
+    echo "Installer is missing: $ZAPRET_MENU_SOURCE_DIR/extras/macos-menu/install.sh" >&2
+    exit 70
+  }
+  [ -x "$ZAPRET_MENU_SOURCE_DIR/extras/macos-native/sync-upstream.sh" ] || {
+    echo "Sync script is missing: $ZAPRET_MENU_SOURCE_DIR/extras/macos-native/sync-upstream.sh" >&2
+    exit 70
+  }
+
+  require_clean_repo
+  branch=$(current_source_branch)
+  case "$branch" in
+    master|main)
+      echo "Refusing full update on $branch directly. Use the fork development branch." >&2
+      exit 75
+      ;;
+  esac
+
+  run_as_install_user /usr/bin/env \
+    UPSTREAM_URL="$ZAPRET_MENU_UPSTREAM_URL" \
+    FORK_URL="$ZAPRET_MENU_FORK_URL" \
+    BRANCH="$ZAPRET_MENU_BRANCH" \
+    "$ZAPRET_MENU_SOURCE_DIR/extras/macos-native/sync-upstream.sh"
+
+  reinstall_current
 }
 
 case "${1:-}" in
   start)
     require_runtime
     prepare_runtime_dirs
-    if [ -n "$(matching_tpws_pids)" ]; then
-      echo "zapret2 compatibility backend is already running"
+    if [ -n "$(matching_backend_pids)" ]; then
+      echo "zapret2 native backend is already running"
+      start_legacy_fallback
       exit 0
     fi
-    "$ZAPRET_BASE/init.d/macos/zapret" start
+    backend_output=$(run_backend start 2>&1) || backend_rc=$?
+    backend_rc=${backend_rc:-0}
+    printf "%s\n" "$backend_output"
+    start_legacy_fallback
+    exit "$backend_rc"
     ;;
   stop)
     require_runtime
-    "$ZAPRET_BASE/init.d/macos/zapret" stop || true
-    stop_tpws
+    run_backend stop || true
+    stop_backend_processes
+    stop_legacy_tpws_processes
     ;;
   restart)
     "$0" stop
@@ -51,10 +446,77 @@ case "${1:-}" in
     ;;
   update)
     require_runtime
-    "$ZAPRET_BASE/ipset/get_refilter_domains.sh"
+    echo "native backend hostlist update is not implemented yet"
+    exit 69
+    ;;
+  update-all)
+    full_update
+    ;;
+  reinstall)
+    reinstall_current
+    ;;
+  status)
+    require_runtime
+    run_backend status || true
+    if [ -n "$(matching_legacy_tpws_pids)" ]; then
+      echo "legacy fallback: running"
+    else
+      echo "legacy fallback: stopped"
+    fi
+    ;;
+  profiles)
+    require_runtime
+    run_backend profiles
+    ;;
+  profile)
+    require_runtime
+    run_backend profile
+    ;;
+  check-profile)
+    require_runtime
+    if [ -n "${2:-}" ]; then
+      run_backend check-profile "$2"
+    else
+      run_backend check-profile
+    fi
+    ;;
+  check-utun)
+    require_runtime
+    run_backend check-utun
+    ;;
+  reset-network)
+    reset_network_state
+    ;;
+  discover-discord-media)
+    require_runtime
+    run_backend discover-discord-media
+    ;;
+  enable-discord-media-routes)
+    require_runtime
+    run_backend enable-discord-media-routes
+    ;;
+  disable-discord-media-routes)
+    require_runtime
+    run_backend disable-discord-media-routes
+    ;;
+  fix-discord-startup)
+    fix_discord_startup_hosts
+    fix_discord_desktop_settings
+    ;;
+  reset-discord-cache)
+    reset_discord_volatile_cache
+    fix_discord_desktop_settings
+    ;;
+  set-profile)
+    require_runtime
+    [ -n "${2:-}" ] || {
+      echo "profile name is required" >&2
+      exit 64
+    }
+    run_backend set-profile "$2"
     ;;
   *)
-    echo "Usage: $0 {start|stop|restart|update}" >&2
+    echo "Usage: $0 {start|stop|restart|update|update-all|reinstall|status|profiles|profile|check-profile|check-utun|reset-network|discover-discord-media|enable-discord-media-routes|disable-discord-media-routes|fix-discord-startup|reset-discord-cache|set-profile}" >&2
     exit 64
     ;;
 esac

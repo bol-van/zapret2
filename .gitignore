@@ -2,11 +2,14 @@
 ip2net/ip2net
 mdig/mdig
 nfq2/dvtws2
+nfq2/libzapret2core-darwin.a
+nfq2/build/
 nfq2/nfqws2
 nfq2/winws2.exe
 nfq2/WinDivert*
 tpws/tpws
 binaries/my/
+run/
 ipset/zapret-ip*.txt
 ipset/zapret-ip*.gz
 ipset/zapret-hosts*.txt

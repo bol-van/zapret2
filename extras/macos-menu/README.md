@@ -2,28 +2,27 @@
 
 Optional macOS menu bar controller for `zapret2`.
 
-> **Compatibility status**
+> **Native backend status**
 >
-> `zapret2` does not currently provide a native macOS packet backend. The upstream manual states that macOS is unsupported because Apple removed the BSD `ipdivert` mechanism needed by the `dvtws2` path.
+> This menu is being moved to a real macOS backend for the new zapret2 packet engine.
 >
-> This module is a practical macOS compatibility layer. It reuses the proven `zapret` v1 macOS runtime (`tpws + pf`) and installs it into a separate `/opt/zapret2` tree, then controls it with a `Zapret2 Menu.app` menu bar UI.
+> The old zapret v1 `tpws + pf` compatibility runtime is no longer the target architecture. The production target is a Network Extension packet boundary feeding packets into zapret2 core. See `extras/macos-native`.
 
 ## What You Get
 
 The app lives in the macOS menu bar and provides:
 
 - start, stop, and restart controls;
-- hostlist update;
-- connection check for internet, Apple, YouTube, and Discord;
+- hostlist update wiring;
+- connection check for internet, Apple, YouTube, Discord Web, and Discord Gateway;
 - human-readable status;
 - Russian/English interface switch;
-- launch at user login while keeping the compatibility backend off after reboot.
+- launch at user login while keeping the native backend off after reboot.
 
 ## Requirements
 
 - macOS;
 - Xcode Command Line Tools (`swiftc`);
-- a working zapret v1 macOS runtime at `/opt/zapret` by default;
 - administrator account for installing `/opt/zapret2`, the helper, and sudoers rule.
 
 Install Command Line Tools if needed:
@@ -38,12 +37,6 @@ From the repository root:
 
 ```sh
 extras/macos-menu/install.sh
-```
-
-Custom source zapret v1 runtime:
-
-```sh
-ZAPRET1_BASE=/opt/zapret extras/macos-menu/install.sh
 ```
 
 Custom target runtime:
@@ -62,15 +55,17 @@ The installer:
 
 1. Builds `Zapret2 Menu.app`.
 2. Copies it to `$HOME/Applications/Zapret2 Control`.
-3. Copies the working v1 macOS runtime into `/opt/zapret2`.
-4. Rewrites PF anchor names to `zapret2`, `zapret2-v4`, and `zapret2-v6` so they do not collide with `/opt/zapret`.
-5. Installs `/opt/zapret2/zapret2-menu-helper`.
-6. Adds a limited sudoers rule in `/etc/sudoers.d/zapret2-menu`.
-7. Adds a user LaunchAgent so the menu app starts at login.
+3. Builds the native backend scaffold from `extras/macos-native`.
+4. Installs `/opt/zapret2/bin/zapret2-mac-backend`.
+5. Installs `/opt/zapret2/bin/zapret2-core-bridge-check`, Lua scripts, and native presets.
+6. Installs the dev Packet Tunnel extension scaffold to `/opt/zapret2/PlugIns`.
+7. Installs `/opt/zapret2/zapret2-menu-helper`.
+8. Adds a limited sudoers rule in `/etc/sudoers.d/zapret2-menu`.
+9. Adds a user LaunchAgent so the menu app starts at login.
 
 ## Security Note
 
-The menu app needs elevated privileges because the compatibility backend controls PF rules and root-owned daemons.
+The menu app needs elevated privileges because the native backend will control packet interception and root-owned daemons.
 
 The installer does **not** grant broad passwordless sudo. It grants passwordless access only to:
 
@@ -79,6 +74,12 @@ The installer does **not** grant broad passwordless sudo. It grants passwordless
 /opt/zapret2/zapret2-menu-helper stop
 /opt/zapret2/zapret2-menu-helper restart
 /opt/zapret2/zapret2-menu-helper update
+/opt/zapret2/zapret2-menu-helper update-all
+/opt/zapret2/zapret2-menu-helper status
+/opt/zapret2/zapret2-menu-helper profiles
+/opt/zapret2/zapret2-menu-helper profile
+/opt/zapret2/zapret2-menu-helper check-profile
+/opt/zapret2/zapret2-menu-helper set-profile *
 ```
 
 The sudoers file is validated with `visudo -cf` before installation.
@@ -87,17 +88,18 @@ The sudoers file is validated with `visudo -cf` before installation.
 
 Menu bar icons:
 
-- `📳` compatibility backend is running;
-- `📴` compatibility backend is stopped;
-- `🔀` compatibility backend is restarting.
+- `📳` native backend is running;
+- `📴` native backend is stopped;
+- `🔀` native backend is restarting.
 
 Menu actions:
 
-- `📳 Start` starts the `/opt/zapret2` compatibility backend.
-- `📴 Stop` stops `/opt/zapret2` and clears only `zapret2` PF anchors.
+- `📳 Start` starts the `/opt/zapret2` native backend.
+- `📴 Stop` stops the native backend.
 - `🔀 Restart` refreshes the backend only when it is already running and internet check passes.
+- `🎛 Native Profile` selects `base`, `youtube`, `discord-media`, or `aggressive` after validating the preset through the core bridge.
 - `🔂 Update Hostlist` downloads the domain list.
-- `📶 Check Connection` shows statuses for internet, `apple.com`, `youtube.com`, and `discord.com`.
+- `📶 Check Connection` shows statuses for internet, `apple.com`, `youtube.com`, Discord Web, Discord Gateway, and Discord Voice/Media readiness.
 - `▶ Show Status` shows runtime, last stop, list update date, and list sizes.
 - `ℹ️ About` shows app dates and a short usage guide.
 - `✖ Quit` stops the `/opt/zapret2` backend first, verifies it stopped, then closes the menu app.
@@ -121,7 +123,7 @@ It leaves `/opt/zapret2` in place by default. Remove it too with:
 REMOVE_ZAPRET2_RUNTIME=1 extras/macos-menu/uninstall.sh
 ```
 
-The original `/opt/zapret` runtime is never removed by this module.
+The installer does not use or remove `/opt/zapret`.
 
 ## Build Only
 
@@ -137,4 +139,4 @@ extras/macos-menu/build/Zapret2 Menu.app
 
 ## Native zapret2 Backend
 
-This module is not a native `nfqws2` macOS backend. See `docs/macos-native-backend.md` for the design notes and missing kernel boundary needed for true native support.
+The native backend scaffold lives in `extras/macos-native`. It is not a working packet bypass backend yet; the missing piece is the Network Extension packet boundary and adapter into zapret2 core.

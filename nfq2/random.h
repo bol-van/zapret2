@@ -28,4 +28,8 @@ ssize_t getrandom(void *ptr, size_t len, unsigned int flags);
 
 #include <sys/random.h>
 
+#elif defined(__APPLE__)
+
+#include <sys/random.h>
+
 #endif
