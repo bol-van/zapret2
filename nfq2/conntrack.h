@@ -95,11 +95,12 @@ typedef struct
 {
 	// inactivity time to purge an entry in each connection state
 	uint32_t timeout_syn,timeout_established,timeout_fin,timeout_udp;
+	size_t max_entries;
 	time_t t_purge_interval, t_last_purge;
 	t_conntrack_pool *pool;
 } t_conntrack;
 
-void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_syn, uint32_t timeout_established, uint32_t timeout_fin, uint32_t timeout_udp);
+void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_syn, uint32_t timeout_established, uint32_t timeout_fin, uint32_t timeout_udp, size_t max_entries);
 void ConntrackPoolDestroy(t_conntrack *p);
 bool ConntrackPoolFeed(t_conntrack *p, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse);
 // do not create, do not update. only find existing

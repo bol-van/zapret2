@@ -60,12 +60,13 @@ void ConntrackPoolDestroy(t_conntrack *p)
 	ConntrackPoolDestroyPool(&p->pool);
 }
 
-void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_syn, uint32_t timeout_established, uint32_t timeout_fin, uint32_t timeout_udp)
+void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_syn, uint32_t timeout_established, uint32_t timeout_fin, uint32_t timeout_udp, size_t max_entries)
 {
 	p->timeout_syn = timeout_syn;
 	p->timeout_established = timeout_established;
 	p->timeout_fin = timeout_fin;
 	p->timeout_udp = timeout_udp;
+	p->max_entries = max_entries;
 	p->t_purge_interval = purge_interval;
 	p->t_last_purge = boottime();
 	p->pool = NULL;
@@ -253,7 +254,7 @@ bool ConntrackPoolDoubleSearch(t_conntrack *p, const struct dissect *dis, t_ctra
 	return ConntrackPoolDoubleSearchPool(&p->pool, dis, ctrack, bReverse);
 }
 
-static bool ConntrackPoolFeedPool(t_conntrack_pool **pp, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse)
+static bool ConntrackPoolFeedPool(t_conntrack *p, t_conntrack_pool **pp, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse)
 {
 	t_conn conn, connswp;
 	t_conntrack_pool *ctr;
@@ -278,6 +279,8 @@ static bool ConntrackPoolFeedPool(t_conntrack_pool **pp, const struct dissect *d
 	b_rev = dis->tcp && tcp_synack_segment(dis->tcp);
 	if ((dis->tcp && tcp_syn_segment(dis->tcp)) || b_rev || dis->udp)
 	{
+		if (p->max_entries && HASH_COUNT(*pp) >= p->max_entries)
+			return false;
 		if ((ctr = ConntrackNew(pp, b_rev ? &connswp : &conn)))
 		{
 			ConntrackFeedPacket(&ctr->track, b_rev, dis);
@@ -293,7 +296,7 @@ ok:
 }
 bool ConntrackPoolFeed(t_conntrack *p, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse)
 {
-	return ConntrackPoolFeedPool(&p->pool, dis, ctrack, bReverse);
+	return ConntrackPoolFeedPool(p, &p->pool, dis, ctrack, bReverse);
 }
 
 static bool ConntrackPoolDropPool(t_conntrack_pool **pp, const struct dissect *dis)

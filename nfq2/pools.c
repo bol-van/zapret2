@@ -1061,6 +1061,38 @@ static ip_cache6 *ipcache6Add(ip_cache6 **ipcache, const struct in6_addr *a, con
 
 	return entry;
 }
+
+static bool ipcache_evict_oldest(ip_cache *ipcache)
+{
+	ip_cache4 *entry4, *oldest4 = NULL, *tmp4;
+	ip_cache6 *entry6, *oldest6 = NULL, *tmp6;
+
+	HASH_ITER(hh, ipcache->ipcache4, entry4, tmp4)
+	{
+		if (!oldest4 || entry4->data.last < oldest4->data.last)
+			oldest4 = entry4;
+	}
+	HASH_ITER(hh, ipcache->ipcache6, entry6, tmp6)
+	{
+		if (!oldest6 || entry6->data.last < oldest6->data.last)
+			oldest6 = entry6;
+	}
+	if (oldest4 && (!oldest6 || oldest4->data.last <= oldest6->data.last))
+	{
+		HASH_DEL(ipcache->ipcache4, oldest4);
+		ipcache_item_destroy(&oldest4->data);
+		free(oldest4);
+		return true;
+	}
+	if (oldest6)
+	{
+		HASH_DEL(ipcache->ipcache6, oldest6);
+		ipcache_item_destroy(&oldest6->data);
+		free(oldest6);
+		return true;
+	}
+	return false;
+}
 static void ipcache6Print(ip_cache6 *ipcache)
 {
 	char s_ip[INET6_ADDRSTRLEN];
@@ -1109,6 +1141,13 @@ ip_cache_item *ipcacheTouch(ip_cache *ipcache, const struct in_addr *a4, const s
 	ip_cache6 *ipcache6;
 	if (a4)
 	{
+		if ((ipcache4 = ipcache4Find(ipcache->ipcache4,a4,iface)))
+		{
+			ipcache_item_touch(&ipcache4->data);
+			return &ipcache4->data;
+		}
+	while (ipcache->max_entries && ((size_t)HASH_COUNT(ipcache->ipcache4) + HASH_COUNT(ipcache->ipcache6)) >= ipcache->max_entries)
+			if (!ipcache_evict_oldest(ipcache)) return NULL;
 		if ((ipcache4 = ipcache4Add(&ipcache->ipcache4,a4,iface)))
 		{
 			ipcache_item_touch(&ipcache4->data);
@@ -1117,6 +1156,13 @@ ip_cache_item *ipcacheTouch(ip_cache *ipcache, const struct in_addr *a4, const s
 	}
 	else if (a6)
 	{
+		if ((ipcache6 = ipcache6Find(ipcache->ipcache6,a6,iface)))
+		{
+			ipcache_item_touch(&ipcache6->data);
+			return &ipcache6->data;
+		}
+	while (ipcache->max_entries && ((size_t)HASH_COUNT(ipcache->ipcache4) + HASH_COUNT(ipcache->ipcache6)) >= ipcache->max_entries)
+			if (!ipcache_evict_oldest(ipcache)) return NULL;
 		if ((ipcache6 = ipcache6Add(&ipcache->ipcache6,a6,iface)))
 		{
 			ipcache_item_touch(&ipcache6->data);
@@ -1173,4 +1219,3 @@ void ipcachePurgeRateLimited(ip_cache *ipcache, time_t lifetime)
 		ipcache_purge_prev = now;
 	}
 }
-

@@ -1836,10 +1836,12 @@ static void exithelp(void)
 		" --sockarg=<int|0xHEX>\t\t\t\t\t; override sockarg (SO_USER_COOKIE) for generated packets. default = 0x%08X (%u)\n"
 #endif
 		" --ctrack-timeouts=S:E:F[:U]\t\t\t\t; internal conntrack timeouts for TCP SYN, ESTABLISHED, FIN stages, UDP timeout. default %u:%u:%u:%u\n"
+		" --ctrack-max=<int>\t\t\t\t\t; maximum internal conntrack entries. 0 = unlimited. default %u\n"
 		" --ctrack-disable=[0|1]\t\t\t\t\t; 1 or no argument disables conntrack\n"
 		" --payload-disable=[type[,type]]\t\t\t; do not discover these payload types. for available payload types see '--payload'. disable all if no argument.\n"
 		" --server=[0|1]\t\t\t\t\t\t; change multiple aspects of src/dst ip/port handling for incoming connections\n"
 		" --ipcache-lifetime=<int>\t\t\t\t; time in seconds to keep cached hop count and domain name (default %u). 0 = no expiration\n"
+		" --ipcache-max=<int>\t\t\t\t\t; maximum IP-cache entries. 0 = unlimited. default %u\n"
 		" --ipcache-hostname=[0|1]\t\t\t\t; 1 or no argument enables ip->hostname caching\n"
 		" --reasm-disable=[type[,type]]\t\t\t\t; disable reasm for these L7 payloads : tls_client_hello quic_initial . if no argument - disable all reasm.\n"
 #ifdef __CYGWIN__
@@ -1916,7 +1918,9 @@ static void exithelp(void)
 		DPI_DESYNC_FWMARK_DEFAULT,DPI_DESYNC_FWMARK_DEFAULT,
 #endif
 		CTRACK_T_SYN, CTRACK_T_EST, CTRACK_T_FIN, CTRACK_T_UDP,
+		CTRACK_MAX_ENTRIES,
 		IPCACHE_LIFETIME,
+		IPCACHE_MAX_ENTRIES,
 		LUA_GC_INTERVAL,
 		all_protos,
 		HOSTLIST_AUTO_FAIL_THRESHOLD_DEFAULT, HOSTLIST_AUTO_FAIL_TIME_DEFAULT,
@@ -1993,10 +1997,12 @@ enum opt_indices {
 	IDX_UID,
 #endif
 	IDX_CTRACK_TIMEOUTS,
+	IDX_CTRACK_MAX,
 	IDX_CTRACK_DISABLE,
 	IDX_PAYLOAD_DISABLE,
 	IDX_SERVER,
 	IDX_IPCACHE_LIFETIME,
+	IDX_IPCACHE_MAX,
 	IDX_IPCACHE_HOSTNAME,
 	IDX_REASM_DISABLE,
 #ifdef __linux__
@@ -2098,10 +2104,12 @@ static const struct option long_options[] = {
 	[IDX_UID] = {"uid", required_argument, 0, 0},
 #endif
 	[IDX_CTRACK_TIMEOUTS] = {"ctrack-timeouts", required_argument, 0, 0},
+	[IDX_CTRACK_MAX] = {"ctrack-max", required_argument, 0, 0},
 	[IDX_CTRACK_DISABLE] = {"ctrack-disable", optional_argument, 0, 0},
 	[IDX_PAYLOAD_DISABLE] = {"payload-disable", optional_argument, 0, 0},
 	[IDX_SERVER] = {"server", optional_argument, 0, 0},
 	[IDX_IPCACHE_LIFETIME] = {"ipcache-lifetime", required_argument, 0, 0},
+	[IDX_IPCACHE_MAX] = {"ipcache-max", required_argument, 0, 0},
 	[IDX_IPCACHE_HOSTNAME] = {"ipcache-hostname", optional_argument, 0, 0},
 	[IDX_REASM_DISABLE] = {"reasm-disable", optional_argument, 0, 0},
 #ifdef __linux__
@@ -2466,6 +2474,13 @@ int main(int argc, char **argv)
 				exit_clean(1);
 			}
 			break;
+		case IDX_CTRACK_MAX:
+			if (sscanf(optarg, "%u", &params.ctrack_max_entries) != 1)
+			{
+				DLOG_ERR("invalid ctrack max entries\n");
+				exit_clean(1);
+			}
+			break;
 		case IDX_CTRACK_DISABLE:
 			params.ctrack_disable = !optarg || atoi(optarg);
 			break;
@@ -2476,6 +2491,13 @@ int main(int argc, char **argv)
 			if (sscanf(optarg, "%u", &params.ipcache_lifetime) != 1)
 			{
 				DLOG_ERR("invalid ipcache-lifetime value\n");
+				exit_clean(1);
+			}
+			break;
+		case IDX_IPCACHE_MAX:
+			if (sscanf(optarg, "%zu", &params.ipcache.max_entries) != 1)
+			{
+				DLOG_ERR("invalid ipcache max entries\n");
 				exit_clean(1);
 			}
 			break;
@@ -3326,7 +3348,7 @@ int main(int argc, char **argv)
 	else
 	{
 		DLOG("initializing conntrack with timeouts tcp=%u:%u:%u udp=%u\n", params.ctrack_t_syn, params.ctrack_t_est, params.ctrack_t_fin, params.ctrack_t_udp);
-		ConntrackPoolInit(&params.conntrack, 10, params.ctrack_t_syn, params.ctrack_t_est, params.ctrack_t_fin, params.ctrack_t_udp);
+		ConntrackPoolInit(&params.conntrack, 10, params.ctrack_t_syn, params.ctrack_t_est, params.ctrack_t_fin, params.ctrack_t_udp, params.ctrack_max_entries);
 	}
 	DLOG("ipcache lifetime %us\n", params.ipcache_lifetime);
 

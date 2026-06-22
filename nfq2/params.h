@@ -36,6 +36,8 @@
 #define HOSTLIST_AUTO_UDP_IN			1
 
 #define IPCACHE_LIFETIME		7200
+#define CTRACK_MAX_ENTRIES		8192
+#define IPCACHE_MAX_ENTRIES		16384
 
 #define MAX_GIDS 64
 
@@ -176,6 +178,7 @@ struct params_s
 	struct blob_collection_head blobs;
 
 	unsigned int ctrack_t_syn, ctrack_t_est, ctrack_t_fin, ctrack_t_udp;
+	unsigned int ctrack_max_entries;
 	t_conntrack conntrack;
 	bool ctrack_disable, server;
 

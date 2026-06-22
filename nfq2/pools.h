@@ -290,6 +290,7 @@ typedef struct ip_cache
 {
 	ip_cache4 *ipcache4;
 	ip_cache6 *ipcache6;
+	size_t max_entries;
 } ip_cache;
 
 ip_cache_item *ipcacheTouch(ip_cache *ipcache, const struct in_addr *a4, const struct in6_addr *a6, const char *iface);
