@@ -5,7 +5,7 @@ make -C /opt/zapret2 systemd
 
 * fedora, rhel, centos, alma
 
-dnf add make gcc zlib-devel libcap-devel libnetfilter_queue-devel libmnl-devel systemd-devel luajit-devel
+dnf install make gcc zlib-ng-devel libcap-devel libnetfilter_queue-devel libmnl-devel systemd-devel luajit-devel
 make -C /opt/zapret2 systemd
 
 * linux static :
