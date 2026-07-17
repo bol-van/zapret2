@@ -47,7 +47,7 @@ t_l7proto l7proto_from_name(const char *name)
 }
 bool l7_proto_match(t_l7proto l7proto, uint64_t filter_l7)
 {
-	return filter_l7==L7_ALL || (filter_l7 & (1ULL<<l7proto)) || (filter_l7 & (1ULL<<L7_KNOWN)) && l7proto>L7_KNOWN && l7proto<L7_LAST;
+	return (filter_l7==L7_ALL) || (filter_l7 & (1ULL<<l7proto)) || (filter_l7 & (1ULL<<L7_KNOWN)) && (l7proto>L7_KNOWN) && (l7proto<L7_LAST);
 }
 
 static const char *l7payload_name[] = {
@@ -76,7 +76,7 @@ const char *l7payload_str(t_l7payload l7)
 }
 bool l7_payload_match(t_l7payload l7payload, uint64_t filter_l7p)
 {
-	return filter_l7p==L7P_ALL || (filter_l7p & (1ULL<<l7payload)) || (filter_l7p & (1ULL<<L7P_KNOWN)) && l7payload>L7P_KNOWN && l7payload<L7P_LAST;
+	return (filter_l7p==L7P_ALL) || (filter_l7p & (1ULL<<l7payload)) || (filter_l7p & (1ULL<<L7P_KNOWN)) && (l7payload>L7P_KNOWN) && (l7payload<L7P_LAST);
 }
 bool l7_payload_str_list(uint64_t l7p, char *buf, size_t size)
 {
@@ -651,7 +651,7 @@ bool TLSAdvanceToHostInSNI(const uint8_t **ext, size_t *elen, size_t *slen)
 	if (*elen < 5 || (*ext)[2] != 0) return false;
 	uint16_t nll = pntoh16(*ext);
 	*slen = pntoh16(*ext + 3);
-	if (nll<(*slen+3) || nll>(*elen-2)) return false;
+	if (nll<(*slen+3) || *slen > *elen-5) return false;
 	*ext += 5; *elen -= 5;
 	return true;
 }
