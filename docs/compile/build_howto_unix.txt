@@ -1,6 +1,6 @@
 * debian,ubuntu :
 
-apt install make gcc zlib1g-dev libcap-dev libnetfilter-queue-dev libmnl-dev libsystemd-dev libluajit2-5.1-dev
+apt install make gcc zlib1g-dev libcap-dev libnetfilter-queue-dev libmnl-dev libsystemd-dev libluajit-5.1-dev
 make -C /opt/zapret2 systemd
 
 * fedora, rhel, centos, alma
