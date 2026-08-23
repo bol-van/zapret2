@@ -2229,7 +2229,7 @@ If conntrack is disabled or the packet is not valid tcp or udp, nil is returned.
 function get_source_ip(target)
 ```
 
-Get source IP (raw string) that would be used for connection the the target IP.
+Get source IP (raw string) that would be used for connection to the target IP.
 Returns nil if destination is unreachable.
 
 ```
