@@ -1329,7 +1329,6 @@ void lua_pushf_tcphdr_options(lua_State *L, const struct tcphdr *tcp, size_t len
 			t+=t[1];
 		}
 		lua_rawset(L,-3);
-		if (opt==TCP_KIND_END) break;
 		idx++;
 	}
 
