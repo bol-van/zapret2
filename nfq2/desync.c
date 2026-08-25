@@ -17,6 +17,7 @@
 
 #define TCP_MAX_REASM 16384
 #define UDP_MAX_REASM 16384
+#define FASTPATH_RETRANS_THRESHOLD 2
 
 typedef	struct
 {
@@ -807,6 +808,27 @@ static bool ipcache_get_hostname(const struct in_addr *a4, const struct in6_addr
 	else
 		*hostname = 0;
 	return *hostname;
+}
+// hardware fastpath autodetect. retransmissions during incomplete reasm are counted
+// per server IP (ipcache survives connections, unlike t_ctrack). when the counter
+// reaches FASTPATH_RETRANS_THRESHOLD the platform is considered hardware fastpath
+// and the first reasm fragment of subsequent connections is replaced with an
+// ACK-only packet instead of being dropped (see dpi_desync_tcp_packet_play).
+static void ipcache_update_fastpath(const struct in_addr *a4, const struct in6_addr *a6)
+{
+	ip_cache_item *ipc = ipcacheTouch(&params.ipcache, a4, a6, NULL);
+	if (!ipc)
+	{
+		DLOG_ERR("ipcache_update_fastpath: out of memory\n");
+		return;
+	}
+	if (ipc->fastpath_retrans_count < 255) ipc->fastpath_retrans_count++;
+	DLOG("updated fastpath counter %u/%u\n", ipc->fastpath_retrans_count, FASTPATH_RETRANS_THRESHOLD);
+}
+static bool ipcache_get_fastpath(const struct in_addr *a4, const struct in6_addr *a6)
+{
+	ip_cache_item *ipc = ipcacheFind(&params.ipcache, a4, a6, NULL);
+	return ipc && ipc->fastpath_retrans_count >= FASTPATH_RETRANS_THRESHOLD;
 }
 static void ipcache_update_ttl(t_ctrack *ctrack, const struct in_addr *a4, const struct in6_addr *a6, const char *iface)
 {
@@ -1636,7 +1658,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 
 				if (!ReasmIsEmpty(&ps.ctrack->reasm_client))
 				{
-					// hardware fastpath fallback: a retransmission of already buffered data means
+					// hardware fastpath fallback and autodetect: a retransmission of already buffered data means
 					// the remaining reasm fragments are not reaching NFQUEUE (FASTNAT/RTCACHE
 					// steals them; the dup-ACK storm proves the fastpath itself already delivered
 					// them to the server out of order). discard the reasm and the queued originals
@@ -1645,8 +1667,12 @@ static uint8_t dpi_desync_tcp_packet_play(
 					// path with regular single packet semantics: split positions inside the first
 					// fragment still resolve (SNI is almost always there). flows with SNI in the
 					// stolen fragments can not be desynced - those bytes never reach NFQUEUE.
+					// the event is also counted per server IP in ipcache: after FASTPATH_RETRANS_THRESHOLD
+					// events the platform is considered fastpath and further connections take the
+					// ACK-only replacement path below from the first fragment.
 					if (is_retransmission(&ps.ctrack->pos.client))
 					{
+						ipcache_update_fastpath(ps.sdip4, ps.sdip6);
 						DLOG("retransmission while reasm is incomplete (fastpath steals further fragments). discarding reasm, falling back to single packet desync\n");
 						reasm_client_cancel_discard(ps.ctrack);
 						goto rediscover;
@@ -1676,13 +1702,17 @@ static uint8_t dpi_desync_tcp_packet_play(
 					// Workaround for hardware fastpath platforms (Mediatek MT7621, Keenetic KN-1011):
 					// DROP of the first fragment triggers RTCACHE in conntrack, after which
 					// subsequent fragments bypass NFQUEUE entirely via hardware shortcut.
-					// Reasm never completes. Fix: replace the first fragment with a payload-less
-					// TCP ACK (VERDICT_MODIFY keeps NF_ACCEPT semantics so the flow stays on the
-					// slow path). No ClientHello bytes leak to the server or DPI and no TCP
-					// sequence space is occupied. The full desynced payload is delivered by the
-					// strategy during replay. The original packet stays in the delayed queue for
-					// logical replay; only its resend is suppressed.
-					if (is_first)
+					// Reasm never completes. Applied only after the platform is detected as
+					// fastpath (ipcache retransmission counter reached the threshold); until
+					// then the first fragment is dropped as usual (upstream behaviour) and the
+					// detection above collects statistics. Fix: replace the first fragment
+					// with a payload-less TCP ACK (VERDICT_MODIFY keeps NF_ACCEPT semantics
+					// so the flow stays on the slow path). No ClientHello bytes leak to the
+					// server or DPI and no TCP sequence space is occupied. The full desynced
+					// payload is delivered by the strategy during replay. The original packet
+					// stays in the delayed queue for logical replay; only its resend is
+					// suppressed.
+					if (is_first && ipcache_get_fastpath(ps.sdip4, ps.sdip6))
 					{
 						rp->suppress_replay_send = true;
 						if (make_tcp_ack_only(dis, mod_pkt, len_mod_pkt))
