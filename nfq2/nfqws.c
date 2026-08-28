@@ -529,7 +529,7 @@ static int nfq_main(void)
 
 	fd = nfq_fd(h);
 	bt_next = bt = 0;
-	do
+	for(;;)
 	{
 		if (bQuit) goto quit;
 		for(;;)
@@ -594,10 +594,8 @@ static int nfq_main(void)
 		DLOG_ERR("recv: recv=%zd errno %d\n", rd, e);
 		errno = e;
 		DLOG_PERROR("recv");
-		errno = e;
-		// do not fail on ENOBUFS
-	} while (errno == ENOBUFS);
-
+		if (e!=ENOBUFS) break;
+	}
 err:
 	res=1;
 	goto ex;
