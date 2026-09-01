@@ -17,6 +17,7 @@
 
 #define TCP_MAX_REASM 16384
 #define UDP_MAX_REASM 16384
+#define FASTPATH_RETRANS_THRESHOLD 2
 
 typedef	struct
 {
@@ -602,9 +603,58 @@ static void reasm_client_cancel(t_ctrack *ctrack)
 {
 	reasm_client_stop(ctrack, "reassemble session cancelled\n");
 }
+// cancel reasm and DISCARD the delayed queue without sending it.
+// used when the hardware fastpath steals further fragments: the queued originals
+// must not leak out unmodified (the DPI would see the real SNI). the client is
+// retransmitting the held data anyway and the retransmission is processed through
+// the normal desync path instead.
+static void reasm_client_cancel_discard(t_ctrack *ctrack)
+{
+	if (ctrack)
+	{
+		ReasmClear(&ctrack->reasm_client);
+		ctrack->reasm_client_payload = L7P_UNKNOWN;
+		rawpacket_queue_destroy(&ctrack->delayed);
+		rawpacket_queue_init(&ctrack->delayed, RAW_PACKET_QUEUE_DELAYED_MAX);
+		DLOG("reassemble session cancelled, delayed packets discarded\n");
+	}
+}
 static void reasm_client_fin(t_ctrack *ctrack)
 {
 	reasm_client_stop(ctrack, "reassemble session finished\n");
+}
+
+
+// hardware fastpath workaround helper: build payload-less TCP ACK from the dissected packet.
+// preserves L3/L4 headers and TCP options, removes payload, fixes lengths and checksums.
+// the ACK does not occupy sequence space and reveals no payload bytes.
+static bool make_tcp_ack_only(const struct dissect *dis, uint8_t *mod_pkt, size_t *len_mod_pkt)
+{
+	if (!dis || !dis->tcp || (!dis->ip && !dis->ip6)) return false;
+
+	size_t len = dis->len_l3 + dis->len_l4; // all L3 headers (incl. ip6 ext) + TCP header with options
+	if (*len_mod_pkt < len) return false;
+	memcpy(mod_pkt, dis->data_pkt, len);
+
+	struct tcphdr *tcp = (struct tcphdr *)(mod_pkt + dis->len_l3);
+	tcp->th_flags &= ~TH_PUSH; // PSH without payload is meaningless
+
+	if (dis->ip)
+	{
+		struct ip *ip = (struct ip *)mod_pkt;
+		ip->ip_len = htons((uint16_t)len);
+		ip->ip_sum = 0;
+		ip4_fix_checksum(ip);
+	}
+	else
+	{
+		struct ip6_hdr *ip6 = (struct ip6_hdr *)mod_pkt;
+		ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)(len - sizeof(struct ip6_hdr)));
+	}
+	tcp_fix_checksum(tcp, dis->len_l4, (struct ip *)mod_pkt, (struct ip6_hdr *)mod_pkt);
+
+	*len_mod_pkt = len;
+	return true;
 }
 
 
@@ -758,6 +808,27 @@ static bool ipcache_get_hostname(const struct in_addr *a4, const struct in6_addr
 	else
 		*hostname = 0;
 	return *hostname;
+}
+// hardware fastpath autodetect. retransmissions during incomplete reasm are counted
+// per server IP (ipcache survives connections, unlike t_ctrack). when the counter
+// reaches FASTPATH_RETRANS_THRESHOLD the platform is considered hardware fastpath
+// and the first reasm fragment of subsequent connections is replaced with an
+// ACK-only packet instead of being dropped (see dpi_desync_tcp_packet_play).
+static void ipcache_update_fastpath(const struct in_addr *a4, const struct in6_addr *a6)
+{
+	ip_cache_item *ipc = ipcacheTouch(&params.ipcache, a4, a6, NULL);
+	if (!ipc)
+	{
+		DLOG_ERR("ipcache_update_fastpath: out of memory\n");
+		return;
+	}
+	if (ipc->fastpath_retrans_count < 255) ipc->fastpath_retrans_count++;
+	DLOG("updated fastpath counter %u/%u\n", ipc->fastpath_retrans_count, FASTPATH_RETRANS_THRESHOLD);
+}
+static bool ipcache_get_fastpath(const struct in_addr *a4, const struct in6_addr *a6)
+{
+	ip_cache_item *ipc = ipcacheFind(&params.ipcache, a4, a6, NULL);
+	return ipc && ipc->fastpath_retrans_count >= FASTPATH_RETRANS_THRESHOLD;
 }
 static void ipcache_update_ttl(t_ctrack *ctrack, const struct in_addr *a4, const struct in6_addr *a6, const char *iface)
 {
@@ -1587,7 +1658,30 @@ static uint8_t dpi_desync_tcp_packet_play(
 
 				if (!ReasmIsEmpty(&ps.ctrack->reasm_client))
 				{
-					if (rawpacket_queue(&ps.ctrack->delayed, &ps.dst, fwmark, desync_fwmark, ifin, ifout, dis->data_pkt, dis->len_pkt, dis->len_payload, &ps.ctrack->pos, false))
+					// hardware fastpath fallback and autodetect: a retransmission of already buffered data means
+					// the remaining reasm fragments are not reaching NFQUEUE (FASTNAT/RTCACHE
+					// steals them; the dup-ACK storm proves the fastpath itself already delivered
+					// them to the server out of order). discard the reasm and the queued originals
+					// WITHOUT sending them - they must not leak unmodified, the DPI would see the
+					// real SNI. the retransmitted packet is processed through the normal desync
+					// path with regular single packet semantics: split positions inside the first
+					// fragment still resolve (SNI is almost always there). flows with SNI in the
+					// stolen fragments can not be desynced - those bytes never reach NFQUEUE.
+					// the event is also counted per server IP in ipcache: after FASTPATH_RETRANS_THRESHOLD
+					// events the platform is considered fastpath and further connections take the
+					// ACK-only replacement path below from the first fragment.
+					if (is_retransmission(&ps.ctrack->pos.client))
+					{
+						ipcache_update_fastpath(ps.sdip4, ps.sdip6);
+						DLOG("retransmission while reasm is incomplete (fastpath steals further fragments). discarding reasm, falling back to single packet desync\n");
+						reasm_client_cancel_discard(ps.ctrack);
+						goto rediscover;
+					}
+
+					bool is_first = rawpacket_queue_empty(&ps.ctrack->delayed);
+
+					struct rawpacket *rp = rawpacket_queue(&ps.ctrack->delayed, &ps.dst, fwmark, desync_fwmark, ifin, ifout, dis->data_pkt, dis->len_pkt, dis->len_payload, &ps.ctrack->pos, false);
+					if (rp)
 					{
 						DLOG("DELAY desync until reasm is complete (#%u)\n", rawpacket_queue_count(&ps.ctrack->delayed));
 					}
@@ -1603,6 +1697,31 @@ static uint8_t dpi_desync_tcp_packet_play(
 					{
 						replay_queue(&ps.ctrack->delayed);
 						reasm_client_fin(ps.ctrack);
+						return VERDICT_DROP;
+					}
+					// Workaround for hardware fastpath platforms (Mediatek MT7621, Keenetic KN-1011):
+					// DROP of the first fragment triggers RTCACHE in conntrack, after which
+					// subsequent fragments bypass NFQUEUE entirely via hardware shortcut.
+					// Reasm never completes. Applied only after the platform is detected as
+					// fastpath (ipcache retransmission counter reached the threshold); until
+					// then the first fragment is dropped as usual (upstream behaviour) and the
+					// detection above collects statistics. Fix: replace the first fragment
+					// with a payload-less TCP ACK (VERDICT_MODIFY keeps NF_ACCEPT semantics
+					// so the flow stays on the slow path). No ClientHello bytes leak to the
+					// server or DPI and no TCP sequence space is occupied. The full desynced
+					// payload is delivered by the strategy during replay. The original packet
+					// stays in the delayed queue for logical replay; only its resend is
+					// suppressed.
+					if (is_first && ipcache_get_fastpath(ps.sdip4, ps.sdip6))
+					{
+						rp->suppress_replay_send = true;
+						if (make_tcp_ack_only(dis, mod_pkt, len_mod_pkt))
+						{
+							DLOG("replacing first reasm fragment with ACK-only packet (hardware fastpath workaround)\n");
+							return VERDICT_MODIFY | VERDICT_NOCSUM;
+						}
+						DLOG_ERR("failed to build ACK-only reasm placeholder. dropping\n");
+						return VERDICT_DROP;
 					}
 					return VERDICT_DROP;
 				}
@@ -2233,19 +2352,47 @@ static bool replay_queue(struct rawpacket_queue *q)
 		DLOG("REPLAYING delayed packet #%u offset %zu\n", i+1, offset);
 		modlen = sizeof(mod);
 		uint8_t verdict = dpi_desync_packet_play(i, count, offset, rp->fwmark_orig, rp->ifin, rp->ifout, rp->tpos_present ? &rp->tpos : NULL, rp->packet, rp->len, mod, &modlen);
-		switch (verdict & VERDICT_MASK)
+		if (rp->suppress_replay_send)
 		{
-		case VERDICT_MODIFY:
-			DLOG("SENDING delayed packet #%u modified\n", i+1);
-			b &= rawsend((struct sockaddr*)&rp->dst,rp->fwmark,rp->ifout,mod,modlen);
-			break;
-		case VERDICT_PASS:
-			DLOG("SENDING delayed packet #%u unmodified\n", i+1);
-			b &= rawsend_rp(rp);
-			break;
-		case VERDICT_DROP:
-			DLOG("DROPPING delayed packet #%u\n", i+1);
-			break;
+			// fastpath workaround: the packet itself was replaced in-flight with an ACK-only
+			// placeholder (VERDICT_MODIFY), so its payload was not delivered by the kernel.
+			// the play call above is still required: lua strategies act on the first replay
+			// piece and send the whole reassembled payload themselves (rawsend side effects),
+			// and replay state (replay_drop, replay_piece_last) must be maintained.
+			// suppress the queued resend only on DROP verdict (the strategy has sent the data
+			// itself). on PASS/MODIFY nothing has delivered the payload yet - resend it,
+			// otherwise the server never receives those bytes and the connection stalls.
+			switch (verdict & VERDICT_MASK)
+			{
+			case VERDICT_MODIFY:
+				DLOG("SENDING delayed packet #%u modified (ACK-only placeholder was sent in-flight)\n", i+1);
+				b &= rawsend((struct sockaddr*)&rp->dst,rp->fwmark,rp->ifout,mod,modlen);
+				break;
+			case VERDICT_PASS:
+				DLOG("SENDING delayed packet #%u unmodified (ACK-only placeholder was sent in-flight)\n", i+1);
+				b &= rawsend_rp(rp);
+				break;
+			case VERDICT_DROP:
+				DLOG("delayed packet #%u replaced by ACK-only placeholder, suppressing queued replay\n", i+1);
+				break;
+			}
+		}
+		else
+		{
+			switch (verdict & VERDICT_MASK)
+			{
+			case VERDICT_MODIFY:
+				DLOG("SENDING delayed packet #%u modified\n", i+1);
+				b &= rawsend((struct sockaddr*)&rp->dst,rp->fwmark,rp->ifout,mod,modlen);
+				break;
+			case VERDICT_PASS:
+				DLOG("SENDING delayed packet #%u unmodified\n", i+1);
+				b &= rawsend_rp(rp);
+				break;
+			case VERDICT_DROP:
+				DLOG("DROPPING delayed packet #%u\n", i+1);
+				break;
+			}
 		}
 
 		if (!bseq)

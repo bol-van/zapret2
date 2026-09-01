@@ -273,6 +273,7 @@ typedef struct ip_cache_item
 	char *hostname;
 	bool hostname_is_ip;
 	uint8_t ttl;
+	uint8_t fastpath_retrans_count;
 } ip_cache_item;
 typedef struct ip_cache4
 {

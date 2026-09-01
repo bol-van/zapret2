@@ -954,6 +954,7 @@ static void ipcache_item_init(ip_cache_item *item)
 	item->hostname = NULL;
 	item->hostname_is_ip = false;
 	item->ttl = 0;
+	item->fastpath_retrans_count = 0;
 }
 static void ipcache_item_destroy(ip_cache_item *item)
 {
@@ -1014,7 +1015,7 @@ static void ipcache4Print(ip_cache4 *ipcache)
 	{
 		*s_ip=0;
 		inet_ntop(AF_INET, &ipc->key.addr, s_ip, sizeof(s_ip));
-		printf("%s iface=%s : ttl %u hostname=%s hostname_is_ip=%u now=last+%llu\n", s_ip, ipc->key.iface, ipc->data.ttl, ipc->data.hostname ? ipc->data.hostname : "", ipc->data.hostname_is_ip, (unsigned long long)(now-ipc->data.last));
+		printf("%s iface=%s : ttl %u hostname=%s hostname_is_ip=%u fastpath_retrans=%u now=last+%llu\n", s_ip, ipc->key.iface, ipc->data.ttl, ipc->data.hostname ? ipc->data.hostname : "", ipc->data.hostname_is_ip, ipc->data.fastpath_retrans_count, (unsigned long long)(now-ipc->data.last));
 	}
 }
 
@@ -1072,7 +1073,7 @@ static void ipcache6Print(ip_cache6 *ipcache)
 	{
 		*s_ip=0;
 		inet_ntop(AF_INET6, &ipc->key.addr, s_ip, sizeof(s_ip));
-		printf("%s iface=%s : ttl %u hostname=%s hostname_is_ip=%u now=last+%llu\n", s_ip, ipc->key.iface, ipc->data.ttl, ipc->data.hostname ? ipc->data.hostname : "", ipc->data.hostname_is_ip, (unsigned long long)(now-ipc->data.last));
+		printf("%s iface=%s : ttl %u hostname=%s hostname_is_ip=%u fastpath_retrans=%u now=last+%llu\n", s_ip, ipc->key.iface, ipc->data.ttl, ipc->data.hostname ? ipc->data.hostname : "", ipc->data.hostname_is_ip, ipc->data.fastpath_retrans_count, (unsigned long long)(now-ipc->data.last));
 	}
 }
 
