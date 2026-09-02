@@ -620,8 +620,8 @@ static uint8_t ct_new_postnat_fix(const t_ctrack *ctrack, const struct dissect *
 	// if used in postnat chain, dropping initial packet will cause conntrack connection teardown
 	// so we need to workaround this.
 	// SYN and SYN,ACK checks are for conntrack-less mode
-	if (ctrack && (params.server ? ctrack->pos.server.pcounter : ctrack->pos.client.pcounter) == 1 ||
-		!ctrack && dis->tcp && (tcp_syn_segment(dis->tcp) || tcp_synack_segment(dis->tcp)))
+	if ((ctrack && (params.server ? ctrack->pos.server.pcounter : ctrack->pos.client.pcounter) == 1) ||
+		(!ctrack && dis->tcp && (tcp_syn_segment(dis->tcp) || tcp_synack_segment(dis->tcp))))
 	{
 		if (dis->len_pkt > *len_mod_pkt)
 			DLOG_ERR("linux postnat conntrack workaround cannot be applied\n");
@@ -693,7 +693,7 @@ static bool check_pos_to(const t_ctrack_position *pos, const struct packet_range
 		if (pos)
 		{
 			ps = pos_get(pos, range->to.mode);
-			return (ps < range->to.pos) || !range->upper_cutoff && (ps == range->to.pos);
+			return (ps < range->to.pos) || (!range->upper_cutoff && (ps == range->to.pos));
 		}
 		else
 			return false;
