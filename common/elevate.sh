@@ -5,6 +5,10 @@ require_root()
 	[ $(id -u) -ne "0" ] && {
 		echo root is required
 		exe="$EXEDIR/$(basename "$0")"
+		exists doas && {
+			echo elevating with doas
+			exec doas sh "$exe"
+		}
 		exists sudo && {
 			echo elevating with sudo
 			exec sudo -E sh "$exe"
