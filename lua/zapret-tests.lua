@@ -536,8 +536,7 @@ function test_dissect()
 					{ kind = 1 },
 					{ kind = 0xE0, data = brandom(math.random(1,10)) },
 					{ kind = 1 },
-					{ kind = 0xE1, data = brandom(math.random(1,10)) },
-					{ kind = 0 }
+					{ kind = 0xE1, data = brandom(math.random(1,10)) }
 				}
 			},
 			payload = brandom(math.random(0, 20))
@@ -704,8 +703,7 @@ function test_csum()
 			{ kind = 1 },
 			{ kind = 0xE0, data = brandom(math.random(1,10)) },
 			{ kind = 1 },
-			{ kind = 0xE1, data = brandom(math.random(1,10)) },
-			{ kind = 0 }
+			{ kind = 0xE1, data = brandom(math.random(1,10)) }
 		}
 	}
 	tcpb = reconstruct_tcphdr(tcp)
@@ -721,9 +719,8 @@ function test_csum()
 		bu8(tcp.options[1].kind)..
 		bu8(tcp.options[2].kind)..bu8(2 + #tcp.options[2].data)..tcp.options[2].data ..
 		bu8(tcp.options[3].kind)..
-		bu8(tcp.options[4].kind)..bu8(2 + #tcp.options[4].data)..tcp.options[4].data ..
-		bu8(tcp.options[5].kind)
-	raw = raw .. string.rep(bu8(TCP_KIND_NOOP), bitand(4-bitand(#raw,3),3))
+		bu8(tcp.options[4].kind)..bu8(2 + #tcp.options[4].data)..tcp.options[4].data
+	raw = raw .. string.rep(bu8(0), bitand(4-bitand(#raw,3),3))
 	print( raw==tcpb and "TCP RECONSTRUCT OK" or "TCP RECONSTRUCT FAILED" )
 	test_assert(raw==tcpb)
 

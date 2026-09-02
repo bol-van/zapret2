@@ -1306,8 +1306,34 @@ void lua_pushf_tcphdr_options(lua_State *L, const struct tcphdr *tcp, size_t len
 
 	uint8_t *t = (uint8_t*)(tcp+1);
 	uint8_t *end = (uint8_t*)tcp + (tcp->th_off<<2);
-	uint8_t opt;
+	uint8_t opt, *ee;
 	if ((end-(uint8_t*)tcp) > len) end=(uint8_t*)tcp + len;
+
+	// strip ending 0x00 options (padding)
+	ee = end;
+	while(t<end)
+	{
+		opt = *t;
+		if (opt==TCP_KIND_END)
+		{
+			// set end marker only once
+			if (ee==end) ee=t;
+		}
+		else
+			// not 0x00 (END) ? clear end marker. ENDs inside other options must be dissected
+			ee=end;
+		// skip to the next option
+		if (opt==TCP_KIND_NOOP || opt==TCP_KIND_END)
+			t++;
+		else
+		{
+			if ((t+1)>=end || t[1]<2 || (t+t[1])>end) break;
+			t+=t[1];
+		}
+	}
+	end = ee;
+	t = (uint8_t*)(tcp+1);
+
 	lua_Integer idx=1;
 	while(t<end)
 	{
