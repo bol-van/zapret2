@@ -2390,7 +2390,7 @@ function tls_dissect_ext(ext)
 		left, off = len16_header()
 		if not left then return end
 		dis.list = {}
-		while left>=1 do
+		while left>=4 do
 			len = u16(ext.data, off + 2)
 			if (len+4)>left then return end
 			dis.list[#dis.list+1] = { group = u16(ext.data, off) , kex = string.sub(ext.data, off+4, off+4+len-1) }
