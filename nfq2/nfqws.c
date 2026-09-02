@@ -1891,6 +1891,9 @@ static void exithelp(void)
 		" --filter-ssid=ssid1[,ssid2,ssid3,...]\t\t\t; per profile wifi SSID filter\n"
 		" --filter-ssid-neg=[0|1]\t\t\t\t; invert SSID filter\n"
 #endif
+#ifdef __linux__
+		" --filter-mark=mark[/mask]\t\t\t\t; filter by fwmark. mark and mask can be decimal or 0xHEX\n"
+#endif
 		" --ipset=<filename>\t\t\t\t\t; ipset include filter (one ip/CIDR per line, ipv4 and ipv6 accepted, gzip supported, multiple ipsets allowed)\n"
 		" --ipset-ip=<ip_list>\t\t\t\t\t; comma separated fixed subnet list\n"
 		" --ipset-exclude=<filename>\t\t\t\t; ipset exclude filter (one ip/CIDR per line, ipv4 and ipv6 accepted, gzip supported, multiple ipsets allowed)\n"
@@ -2044,6 +2047,9 @@ enum opt_indices {
 	IDX_FILTER_SSID,
 	IDX_FILTER_SSID_NEG,
 #endif
+#ifdef __linux__
+	IDX_FILTER_MARK,
+#endif
 	IDX_IPSET,
 	IDX_IPSET_IP,
 	IDX_IPSET_EXCLUDE,
@@ -2148,6 +2154,9 @@ static const struct option long_options[] = {
 #ifdef HAS_FILTER_SSID
 	[IDX_FILTER_SSID] = {"filter-ssid", required_argument, 0, 0},
 	[IDX_FILTER_SSID_NEG] = {"filter-ssid-neg", optional_argument, 0, 0},
+#endif
+#ifdef __linux__
+	[IDX_FILTER_MARK] = {"filter-mark", required_argument, 0, 0},
 #endif
 	[IDX_IPSET] = {"ipset", required_argument, 0, 0},
 	[IDX_IPSET_IP] = {"ipset-ip", required_argument, 0, 0},
@@ -2522,7 +2531,7 @@ int main(int argc, char **argv)
 #endif
 #if defined(__linux__) || defined(SO_USER_COOKIE)
 			params.desync_fwmark = 0;
-			if (sscanf(optarg, "0x%X", &params.desync_fwmark) <= 0) sscanf(optarg, "%u", &params.desync_fwmark);
+			if (sscanf(optarg, "0x%X", &params.desync_fwmark)!=1) sscanf(optarg, "%u", &params.desync_fwmark);
 			if (!params.desync_fwmark)
 			{
 				DLOG_ERR("fwmark/sockarg should be decimal or 0xHEX and should not be zero\n");
@@ -2855,6 +2864,26 @@ int main(int argc, char **argv)
 			dp->filter_ssid_neg = !optarg || atoi(optarg);
 			break;
 #endif
+#ifdef __linux__
+		case IDX_FILTER_MARK:
+			{
+			char *smask = strchr(optarg,'/');
+			if (smask) *smask++=0;
+			if (sscanf(optarg, "0x%X", &dp->filter_mark)!=1 && sscanf(optarg, "%u", &dp->filter_mark)!=1) goto fmark_err;
+			if (smask)
+			{
+				if (sscanf(smask, "0x%X", &dp->filter_mark_mask)!=1 && sscanf(smask, "%u", &dp->filter_mark_mask)!=1) goto fmark_err;
+			}
+			else
+				// no mask - use the whole 32-bit value
+				dp->filter_mark_mask=0xFFFFFFFF;
+			break;
+fmark_err:
+			DLOG_ERR("filter mark or mask format error\n");
+			exit_clean(1);
+			}
+#endif
+
 		case IDX_IPSET:
 			if (bSkip) break;
 			if (!RegisterIpset(dp, false, optarg))

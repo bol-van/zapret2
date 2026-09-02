@@ -74,6 +74,9 @@ struct desync_profile
 	struct str_list_head filter_ssid;
 	bool filter_ssid_neg;
 #endif
+#ifdef __linux__
+	uint32_t filter_mark,filter_mark_mask;
+#endif
 
 	// list of pointers to ipsets
 	struct ipset_collection_head ips_collection, ips_collection_exclude;
@@ -97,7 +100,6 @@ struct desync_profile
 	bool b_hostlist_auto_retrans_maxseq, b_hostlist_auto_incoming_maxseq, b_hostlist_auto_retrans_reset;
 	bool b_hostlist_auto_udp_out, b_hostlist_auto_udp_in;
 	bool b_filter_l3, b_filter_l7;
-
 };
 #define PROFILE_NAME(dp) ((dp)->name ? (dp)->name : "noname")
 

@@ -772,6 +772,7 @@ LUA DESYNC ACTION:
  --bind-fix4                            ; лечение проблемы ухода генерированных пакетов на Linux с неверного интерфейса при использовании PBR (ipv4)
  --bind-fix6                            ; аналогично для ipv6
  --fwmark=<int|0xHEX>                   ; бит в mark для предотвращения зацикливания. default = 0x40000000
+ --filter-mark=mark[/mask]              ; фильтр профиля : фильтрация по mark пакета. mark и mask могут быть десятичные или 0xHEX
  --filter-ssid=ssid1[,ssid2,ssid3,...]  ; фильтр профиля : имя wifi сети
  --filter-ssid-neg=[0|1]                ; фильтр профиля : инверсия фильтра wifi сети
 ```

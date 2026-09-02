@@ -712,6 +712,7 @@ Specific parameters for nfqws2:
  --bind-fix4                            ; fix for the issue where generated packets on Linux exit from the wrong interface when using PBR (IPv4)
  --bind-fix6                            ; same as above for IPv6
  --fwmark=<int|0xHEX>                   ; mark bit to prevent looping. default = 0x40000000
+ --filter-mark=mark[/mask]              ; profile filter: filter by packet mark. mark and mask can be decimal or 0xHEX
  --filter-ssid=ssid1[,ssid2,ssid3,...]  ; profile filter: WiFi network name (SSID)
  --filter-ssid-neg=[0|1]                ; profile filter: negate SSID filter
 ```
