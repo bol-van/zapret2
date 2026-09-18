@@ -1083,7 +1083,7 @@ curl_test()
 				[ $REPEATS -gt 1 ] && echo 'AVAILABLE'
 			else
 				code=$?
-				[ "$SCANLEVEL" = quick ] && break
+				[ "$SCANLEVEL" = quick -o "$SCANLEVEL" = veryquick ] && break
 			fi
 		done
 	fi
@@ -1708,10 +1708,11 @@ ask_params()
 		SCANLEVEL=standard
 		[ "$BATCH" = 1 ] || {
 			echo
-			echo quick    - in multi-attempt mode skip further attempts after first failure
-			echo standard - do investigation what works on your DPI
-			echo force    - scan maximum despite of result
-			ask_list SCANLEVEL "quick standard force" "$SCANLEVEL"
+			echo veryquick - same as quick, and also stop testing more variations of a strategy family once one already succeeds
+			echo quick     - in multi-attempt mode skip further attempts after first failure
+			echo standard  - do investigation what works on your DPI
+			echo force     - scan maximum despite of result
+			ask_list SCANLEVEL "veryquick quick standard force" "$SCANLEVEL"
 		}
 	}
 

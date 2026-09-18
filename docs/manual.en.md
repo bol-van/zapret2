@@ -4795,6 +4795,7 @@ Parallel mode is [supported](#shell-variables). In this mode, each attempt is ex
 
 - **standard** - uses a test algorithm that excludes strategies deemed irrelevant based on previous successes or other criteria. In the case of multiple attempts, testing does not stop upon failure. The success rate and curl errors can also provide useful information for situational analysis.
 - **quick** - same as standard, but when using multiple attempts, testing stops after the first failure.
+- **veryquick** - same as quick, and also stops testing further variations of a strategy family (extra TCP foolings, autottl deltas, TTL values, and, where applicable, multisplit/fakedsplit positions and split-mechanisms) as soon as any combination has already succeeded for the current target, instead of continuing through the rest for completeness. Only affects the fake-based strategy families (25-fake.sh, 30-faked.sh, 35-hostfake.sh, 50-fake-multi.sh, 55-fake-faked.sh, 60-fake-hostfake.sh); can make those noticeably faster to test when an early candidate already succeeds, at the cost of not necessarily finding every strategy that would also have succeeded (success here means curl got through - it says nothing about how that strategy will actually do in a real browser).
 - **force** - tests as extensively as possible, regardless of previous test results.
 
 ### Supported protocols
