@@ -65,6 +65,33 @@ QNUM=${QNUM:-$(($$ % 64536 + 1000))}
 
 PARALLEL_OUT=/tmp/zapret_parallel_$$
 HDRTEMP=/tmp/zapret-hdr-$$
+
+sweep_stale_pidfiles()
+{
+	# $1 - fixed filename prefix immediately preceding the pid
+	#
+	# A normal exit already removes this run's own PARALLEL_OUT/HDRTEMP
+	# files (unprepare_all(), further down), which covers Ctrl+C,
+	# a closed terminal, and a plain kill. kill -9 and crashes bypass
+	# that, as they would for any script's cleanup, and can leave
+	# stale files behind indefinitely, since nothing about a later run
+	# gives it any reason to know about a different PID's leftovers.
+	# Removes a matching file only once its PID (the run that created
+	# it) is confirmed no longer running, so a genuinely still-running
+	# concurrent instance - a different PID, its own files - is never
+	# touched.
+	local f pid prefix="$1"
+	for f in "$prefix"*; do
+		[ -e "$f" ] || continue
+		pid=${f#"$prefix"}
+		pid=${pid%%[!0-9]*}
+		[ -n "$pid" ] || continue
+		kill -0 "$pid" 2>/dev/null || rm -f "$f"
+	done
+}
+sweep_stale_pidfiles /tmp/zapret_parallel_
+sweep_stale_pidfiles /tmp/zapret-hdr-
+
 NFT_TABLE=blockcheck$$
 IPT_OUT_CHAIN=blockcheck_output_$$
 IPT_IN_CHAIN=blockcheck_input_$$
@@ -85,8 +112,22 @@ unset ALL_PROXY
 
 apply_header_padfile()
 {
-	local n=1 left size
+	local n=1 left size f pid
 	if [ "$CURL_PAD" -gt 0 ] 2>/dev/null; then
+		# A normal exit already removes this run's own pad file (see
+		# cleanup() below), which covers Ctrl+C, a closed terminal, and
+		# a plain kill. kill -9 and crashes bypass that, as they would
+		# for any script's cleanup, so sweep any such leftover from
+		# a previous run before making this run's own - only once its PID
+		# is confirmed no longer running, so a genuinely still-running
+		# concurrent instance (different PID, its own file) is never
+		# touched
+		for f in /tmp/zapret-curlpad-*; do
+			[ -e "$f" ] || continue
+			pid=${f##*-}
+			case "$pid" in ''|*[!0-9]*) continue ;; esac
+			kill -0 "$pid" 2>/dev/null || rm -f "$f"
+		done
 		left=$CURL_PAD
 		CURL_PAD_FILE=/tmp/zapret-curlpad-$$
 		rm -f "$CURL_PAD_FILE"
