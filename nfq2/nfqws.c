@@ -1914,8 +1914,8 @@ static void exithelp(void)
 		" --hostlist-auto-debug=<logfile>\t\t\t; debug auto hostlist positives (global parameter)\n"
 		"\nLUA PACKET PASS MODE:\n"
 		" --payload=type[,type]\t\t\t\t\t; set payload types following LUA functions should process : %s\n"
-		" --out-range=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]\t; set outgoing packet range for following LUA functions. '-' - include end pos, '<' - not include. prefix meaning : n - packet number, d - data packet number, s - relative sequence, p - data position relative sequence, b - byte count, x - never, a - always\n"
-		" --in-range=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]\t; set incoming packet range for following LUA functions. '-' - include end pos, '<' - not include. prefix meaning : n - packet number, d - data packet number, s - relative sequence, p - data position relative sequence, b - byte count, x - never, a - always\n"
+		" --out-range=(a|x|[(n|d|s|p|b)<int>](-|<)[(n|d|s|p|b)<int>])\t; set outgoing packet range for following LUA functions. '-' - include end pos, '<' - not include. prefix meaning : n - packet number, d - data packet number, s - relative sequence, p - data position relative sequence, b - byte count, x - never, a - always\n"
+		" --in-range=(a|x|[(n|d|s|p|b)<int>](-|<)[(n|d|s|p|b)<int>])\t; set incoming packet range for following LUA functions. '-' - include end pos, '<' - not include. prefix meaning : n - packet number, d - data packet number, s - relative sequence, p - data position relative sequence, b - byte count, x - never, a - always\n"
 		"\nLUA DESYNC ACTION:\n"
 		" --lua-desync=<functon>[:param1=val1[:param2=val2]]\t; call LUA function when packet received\n",
 #if defined(__linux__) || defined(SO_USER_COOKIE)

@@ -696,8 +696,8 @@ MULTI-STRATEGY:
 
 LUA PACKET PASS MODE:
  --payload=type[,type]                                  ; in-profile filter: payload filter for subsequent instances within the profile
- --out-range=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]  ; in-profile filter: conntrack counter range for subsequent instances within the profile - outgoing direction
- --in-range=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]   ; in-profile filter: conntrack counter range for subsequent instances within the profile - incoming direction
+ --out-range=(a|x|[(n|d|s|p|b)<int>](-|<)[(n|d|s|p|b)<int>])  ; in-profile filter: conntrack counter range for subsequent instances within the profile - outgoing direction
+ --in-range=(a|x|[(n|d|s|p|b)<int>](-|<)[(n|d|s|p|b)<int>])   ; in-profile filter: conntrack counter range for subsequent instances within the profile - incoming direction
 
 LUA DESYNC ACTION:
  --lua-desync=<function>[:param1=val1[:param2=val2]]    ; call a LUA instance with the specified parameters during profile processing if in-profile filter conditions are met
@@ -738,7 +738,7 @@ Specific parameters for winws2:
  --wf-icmp-out=[~]port1[-port2]         ; WinDivert constructor: ICMP types and codes for interception in the outgoing direction. Comma-separated list.
  --wf-ipp-in=type[:code]                ; WinDivert constructor: raw IP protocols for interception in the incoming direction. Comma-separated list.
  --wf-ipp-out=type[:code]               ; WinDivert constructor: raw IP protocols for interception in the outgoing direction. Comma-separated list.
- --wf-tcp-empty=[~]port1[-port2]        ; WinDivert constructor: intercept empty TCP ACK packets. Default is no.
+ --wf-tcp-empty=[0|1]                   ; WinDivert constructor: intercept empty TCP ACK packets. Default is no.
  --wf-raw-part=<filter>|@<filename>     ; WinDivert constructor: partial WinDivert raw filter. Combined using OR principle. Multiple allowed.
  --wf-raw-filter=<filter>|@<filename>   ; WinDivert constructor: partial WinDivert raw filter. Combined using AND principle. Only one is allowed.
  --wf-filter-lan=0|1                    ; WinDivert constructor: filter out non-global IP addresses. Default is yes.
@@ -1065,7 +1065,7 @@ Names are case-sensitive.
 These come in three types: `--payload`, `--in-range`, and `--out-range`. Filter values remain active from the moment they are specified until the next override.
 
 - `--payload=type1[,type2][,type3]...` accepts a comma-separated list of known [payloads](#protocol-detection), "all", or "known". The default is `--payload=all`.
-- `--(in-range|out-range)=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]` sets conntrack counter ranges for inbound and outbound directions. The default is `--in-range=x`, `--out-range=a`.
+- `--(in-range|out-range)=(a|x|[(n|d|s|p|b)<int>](-|<)[(n|d|s|p|b)<int>])` sets conntrack counter ranges for inbound and outbound directions. The default is `--in-range=x`, `--out-range=a`.
 
 Ranges are specified in the following formats: `mX-mY`, `mX<mY`, `-mY`, `<mY`, `mX-`, where `m` is the counter mode, `X` is the lower bound, and `Y` is the upper bound. Modes `x` and `a` are specified as a single letter without a range or counter value. The `-` sign indicates an inclusive upper bound, while `<` indicates an exclusive one.
 
@@ -3464,10 +3464,12 @@ The `ipfrag_options` contain only two standard parameters. The rest are handled 
 
 | Field           | Description                                                                                                         |
 | :-------------- | :------------------------------------------------------------------------------------------------------------------ |
-| ipfrag          | Name of the fragmenter function. If not specified, `ipfrag2` is used. The fragmenter returns an array of dissects (fragments). |
+| ipfrag          | Name of the fragmenter function. If specified without a value, `ipfrag2` is used. If not specified, IP fragmentation is not performed. The fragmenter returns an array of dissects (fragments). |
 | ipfrag_disorder | Send fragments in reverse order.                                                                                    |
 | ipfrag_pos_udp  | (ipfrag2 fragmenter) UDP fragmentation position. Must be a multiple of 8; defaults to 8.                            |
 | ipfrag_pos_tcp  | (ipfrag2 fragmenter) TCP fragmentation position. Must be a multiple of 8; defaults to 32.                           |
+| ipfrag_pos_icmp | (ipfrag2 fragmenter) ICMP fragmentation position. Must be a multiple of 8; defaults to 8.                                      |
+| ipfrag_pos      | (ipfrag2 fragmenter) Fragmentation position for other protocols. Must be a multiple of 8; defaults to 32.                      |
 | ipfrag_next     | (ipfrag2 fragmenter) The "next protocol" type in the "fragment" extension header of the second fragment.            |
 
 ### apply_ip_id
@@ -3498,7 +3500,7 @@ function ipfrag2(dis, ipfrag_options)
 ```
 
 The standard fragmenter function. It returns an array of two fragment dissects derived from the original dissect `dis`.
-It is invoked via `rawsend_dissect_ipfrag` if the `ipfrag` field is missing in `ipfrag_options`.
+It is invoked via `rawsend_dissect_ipfrag` if the `ipfrag` field in `ipfrag_options` is specified without a value. If the `ipfrag` field is not specified, IP fragmentation is not performed.
 You are unlikely to need to call this function manually.
 If you need to split IP packets differently, you can create your own fragmenter by analogy and specify it in `ipfrag_options`.
 
@@ -4206,7 +4208,7 @@ function hostfakesplit(ctx, desync)
 - arg: host - template for [fake host generation](#genhost) - random.template
 - arg: midhost - [marker](#markers) for an additional split of the segment containing the real host.
 - arg: disorder_after - [marker](#markers) for an additional split of the final real part and sending segments in reverse order.
-- arg: nofake, nofake2 - skip sending specific fake packets.
+- arg: nofake1, nofake2 - skip sending specific fake packets.
 - arg: blob - replace the current payload with the specified [blob](#passing-blobs).
 - arg: optional - abort the operation if the blob is specified but missing.
 - arg: nodrop - skip issuing a VERDICT_DROP.
@@ -4450,7 +4452,7 @@ function automate_failure_check(desync, hrec, crec)
 - arg: success_detector - the name of the success detector function. Defaults to `standard_success_detector` if not specified.
 - arg: failure_detector - the name of the failure detector function. Defaults to `standard_failure_detector` if not specified.
 - arg: fails - the target failure counter value. Default is 3.
-- arg: maxtime - the maximum time in seconds between failures before the counter resets. Default is 60 seconds.
+- arg: time - the maximum time in seconds between failures before the counter resets. Default is 60 seconds.
 
 This function maintains the failure counter by invoking the success and failure detectors. It returns `true` if the counter reaches the target value. The counter resets automatically in this case.
 
