@@ -27,6 +27,7 @@ nproc=$(nproc)
 
 TARGETS="\
 aarch64-unknown-linux-musl \
+arm-buildroot-linux-musleabi \
 armv6-unknown-linux-musleabi \
 i586-unknown-linux-musl \
 x86_64-unknown-linux-musl \
@@ -104,6 +105,10 @@ buildenv()
 	# not all archs support -static-pie. if does not support - it produces dynamic executable
 	# "-static -static-pie" causes segfaults
 	case $1 in
+		arm-buildroot-linux-musleabi)
+			CPU="-mcpu=xscale -msoft-float"
+			CFLAGS="$CPU $CFLAGS"
+			;;
 		armv6-*)
 			CPU="-mthumb -msoft-float"
 			CFLAGS="$CPU $CFLAGS"
@@ -274,6 +279,9 @@ check_file()
 translate_target()
 {
 	case $1 in
+		arm-buildroot-linux-musleabi)
+			ZBINTARGET=linux-arm_xscale
+			;;
 		aarch64-unknown-linux-musl)
 			ZBINTARGET=linux-arm64
 			;;

@@ -26,6 +26,8 @@ jobs:
             tool: aarch64-unknown-linux-musl
           - arch: arm
             tool: armv6-unknown-linux-musleabi
+          - arch: arm_xscale
+            tool: arm-buildroot-linux-musleabi
           - arch: mips64
             tool: mips64-unknown-linux-musl
           - arch: mipselsf
@@ -62,7 +64,11 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt update -qq
-          if [[ "$ARCH" == lexra ]]; then
+          if [[ "$ARCH" == arm_xscale ]]; then
+            sudo apt install -y pigz libcap-dev pkg-config
+            URL=https://toolchains.bootlin.com/downloads/releases/toolchains/armv5-eabi/tarballs/armv5-eabi--musl--stable-2024.02-1.tar.bz2
+            DIR=armv5-eabi--musl--stable-2024.02-1
+          elif [[ "$ARCH" == lexra ]]; then
             sudo apt install -y pigz libcap-dev libc6:i386 zlib1g:i386
             URL=https://github.com/$REPO/raw/refs/heads/master/$DIR.txz
           else
@@ -71,7 +77,11 @@ jobs:
             URL=https://github.com/$REPO/releases/download/latest/$TOOL.tar.xz
           fi
           mkdir -p $HOME/tools
-          wget -qO- $URL | tar -C $HOME/tools -xJ || exit 1
+          if [[ "$ARCH" == arm_xscale ]]; then
+            wget -qO- $URL | tar -C $HOME/tools -xj || exit 1
+          else
+            wget -qO- $URL | tar -C $HOME/tools -xJ || exit 1
+          fi
           [[ -d "$HOME/tools/$DIR/bin" ]] && echo "$HOME/tools/$DIR/bin" >> $GITHUB_PATH
 
       - name: Build
@@ -97,6 +107,9 @@ jobs:
           export AR=$TARGET-ar
           export NM=$TARGET-nm
           export STRIP=$TARGET-strip
+          if [[ "$ARCH" == arm_xscale ]]; then
+            export PKG_CONFIG=/usr/bin/pkg-config
+          fi
           export PKG_CONFIG_PATH=$DEPS_DIR/lib/pkgconfig
           export STAGING_DIR=$RUNNER_TEMP
           OPTIMIZE=-Oz
@@ -108,19 +121,28 @@ jobs:
             arm)
               CPU="-mcpu=arm1176jzf-s -mthumb"
               ;;
+            arm_xscale)
+              CPU="-mcpu=xscale -msoft-float"
+              ;;
             arm64|mips64)
               # not safe without GC64
               SYSMALLOC=
               ;;
           esac
           MINSIZE="$OPTIMIZE $MINSIZE"
+          DEP_CFLAGS="$CPU $MINSIZE $CFLAGS"
+          DEP_LDFLAGS="$LDMINSIZE $LDFLAGS"
+          if [[ "$ARCH" == arm_xscale ]]; then
+            DEP_CFLAGS="$CPU $OPTIMIZE -ffunction-sections -fdata-sections $CFLAGS"
+            DEP_LDFLAGS="$LDFLAGS"
+          fi
 
-          if [[ "$ARCH" == lexra ]] || [[ "$ARCH" == riscv64 ]] || [[ "$ARCH" == x86 ]] ; then
+          if [[ "$ARCH" == lexra ]] || [[ "$ARCH" == riscv64 ]] || [[ "$ARCH" == x86 ]] || [[ "$ARCH" == arm_xscale ]] ; then
             # use classic lua
             wget -qO- https://www.lua.org/ftp/lua-${LUA_RELEASE}.tar.gz | tar -xz
             (
               cd lua-${LUA_RELEASE}
-              make CC=$CC AR="$AR rc" CFLAGS="$CPU $MINSIZE $CFLAGS" LDFLAGS="$LDMINSIZE $LDFLAGS" linux -j$(nproc)
+              make CC=$CC AR="$AR rc" CFLAGS="$DEP_CFLAGS" LDFLAGS="$DEP_LDFLAGS" linux -j$(nproc)
               make install INSTALL_TOP=$DEPS_DIR INSTALL_BIN=$DEPS_DIR/bin INSTALL_INC=$DEPS_DIR/include/lua${LUA_VER} INSTALL_LIB=$DEPS_DIR/lib
             )
             LJIT=0
@@ -155,8 +177,8 @@ jobs:
           for i in libmnl libnfnetlink libnetfilter_queue ; do
             (
               cd $i-*
-              CFLAGS="$CPU $MINSIZE $CFLAGS" \
-              LDFLAGS="$LDMINSIZE $LDFLAGS" \
+              CFLAGS="$DEP_CFLAGS" \
+              LDFLAGS="$DEP_LDFLAGS" \
               ./configure --prefix= --host=$TARGET --enable-static --disable-shared --disable-dependency-tracking
               make install -j$(nproc) DESTDIR=$DEPS_DIR
             )
@@ -168,7 +190,7 @@ jobs:
             xargs -I{} wget -qO- https://github.com/madler/zlib/archive/refs/tags/{}.tar.gz | tar -xz
           (
             cd zlib-*
-            CFLAGS="$CPU $MINSIZE $CFLAGS" \
+            CFLAGS="$DEP_CFLAGS" \
             ./configure --prefix= --static
             make install -j$(nproc) DESTDIR=$DEPS_DIR
           )
@@ -570,6 +592,7 @@ jobs:
                 *-android-x86_64 )      run_dir android-x86_64 ;;
                 *-freebsd-x86_64 )      run_dir freebsd-x86_64 ;;
                 *-linux-arm )           run_dir linux-arm ;;
+                *-linux-arm_xscale )    run_dir linux-arm_xscale ;;
                 *-linux-arm64 )         run_dir linux-arm64 ;;
                 *-linux-mips64 )        run_dir linux-mips64 ;;
                 *-linux-mipselsf )      run_dir linux-mipsel ;;
