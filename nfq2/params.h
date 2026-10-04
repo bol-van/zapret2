@@ -54,6 +54,7 @@ extern const char *fake_http_request_default;
 extern const uint8_t fake_tls_clienthello_default[680];
 
 enum log_target { LOG_TARGET_CONSOLE=0, LOG_TARGET_FILE, LOG_TARGET_SYSLOG, LOG_TARGET_ANDROID };
+enum fastpath_workaround_mode { FASTPATH_WORKAROUND_OFF=0, FASTPATH_WORKAROUND_ON, FASTPATH_WORKAROUND_AUTO };
 
 struct desync_profile
 {
@@ -187,6 +188,8 @@ struct params_s
 	bool filter_ssid_present;
 #endif
 
+	enum fastpath_workaround_mode fastpath_workaround;
+	uint8_t fastpath_retrans_count;
 	bool cache_hostname;
 	unsigned int ipcache_lifetime;
 	ip_cache ipcache;
