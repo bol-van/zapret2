@@ -1,14 +1,1 @@
-/config
-ip2net/ip2net
-mdig/mdig
-nfq2/dvtws2
-nfq2/nfqws2
-nfq2/winws2.exe
-nfq2/WinDivert*
-tpws/tpws
-binaries/my/
-ipset/zapret-ip*.txt
-ipset/zapret-ip*.gz
-ipset/zapret-hosts*.txt
-ipset/zapret-hosts*.gz
-.vscode/
+Nothing should be ignored based on the provided file changes. The only modified file is 'README_zapret2.md', which is a documentation file and should not be added to .gitignore.
