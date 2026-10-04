@@ -918,7 +918,7 @@ end
 -- tcp_seq=N - add N to tcp.th_seq
 -- tcp_ack=N - add N to tcp.th_ack
 -- tcp_ts=N - add N to timestamp value
--- tcp_md5[=hex] - add MD5 header with optional 16-byte data. all zero by default.
+-- tcp_md5[=hex] - add MD5 header with optional 16-byte data. random by default.
 -- tcp_flags_set=<list> - set tcp flags in comma separated list
 -- tcp_flags_unset=<list> - unset tcp flags in comma separated list
 -- tcp_ts_up - move timestamp tcp option to the top if it's present. this allows linux not to accept badack segments without badseq. this is very strange discovery but it works.
@@ -1476,7 +1476,7 @@ end
 -- option : ipfrag_pos_udp - udp frag position. ipv4 : starting from L4 header. ipv6: starting from fragmentable part. must be multiple of 8. default 8
 -- option : ipfrag_pos_tcp - tcp frag position. ipv4 : starting from L4 header. ipv6: starting from fragmentable part. must be multiple of 8. default 32
 -- option : ipfrag_pos_icmp - icmp frag position. ipv4 : starting from L4 header. ipv6: starting from fragmentable part. must be multiple of 8. default 8
--- option : ipfrag_pos - icmp frag position for other L4. ipv4 : starting from L4 header. ipv6: starting from fragmentable part. must be multiple of 8. default 32
+-- option : ipfrag_pos - frag position for other L4. ipv4 : starting from L4 header. ipv6: starting from fragmentable part. must be multiple of 8. default 32
 -- option : ipfrag_next - next protocol field in ipv6 fragment extenstion header of the second fragment. same as first by default.
 function ipfrag2(dis, ipfrag_options)
 	local function frag_idx(exthdr)
