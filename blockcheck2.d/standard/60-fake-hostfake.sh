@@ -7,11 +7,17 @@ pktws_hostfake_vary_()
 
 	for disorder in '' 'disorder_after:'; do
 		pktws_curl_test_update $testf $domain $pre ${FAKE:+--blob=$fake:@"$FAKE" }$PAYLOAD --lua-desync=fake:blob=$fake:$fooling:repeats=$FAKE_REPEATS --lua-desync=hostfakesplit:${HOSTFAKE:+host=${HOSTFAKE}:}${disorder}$fooling:repeats=$FAKE_REPEATS $post && ok=1
+		[ "$ok" = 1 -a "$SCANLEVEL" = veryquick ] && return 0
 		pktws_curl_test_update $testf $domain $pre ${FAKE:+--blob=$fake:@"$FAKE" }$PAYLOAD --lua-desync=fake:blob=$fake:$fooling:repeats=$FAKE_REPEATS --lua-desync=hostfakesplit:${HOSTFAKE:+host=${HOSTFAKE}:}${disorder}nofake1:$fooling:repeats=$FAKE_REPEATS $post && ok=1
+		[ "$ok" = 1 -a "$SCANLEVEL" = veryquick ] && return 0
 		pktws_curl_test_update $testf $domain $pre ${FAKE:+--blob=$fake:@"$FAKE" }$PAYLOAD --lua-desync=fake:blob=$fake:$fooling:repeats=$FAKE_REPEATS --lua-desync=hostfakesplit:${HOSTFAKE:+host=${HOSTFAKE}:}${disorder}nofake2:$fooling:repeats=$FAKE_REPEATS $post && ok=1
+		[ "$ok" = 1 -a "$SCANLEVEL" = veryquick ] && return 0
 		pktws_curl_test_update $testf $domain $pre ${FAKE:+--blob=$fake:@"$FAKE" }$PAYLOAD --lua-desync=fake:blob=$fake:$fooling:repeats=$FAKE_REPEATS --lua-desync=hostfakesplit:${HOSTFAKE:+host=${HOSTFAKE}:}${disorder}midhost=midsld:$fooling:repeats=$FAKE_REPEATS $post && ok=1
+		[ "$ok" = 1 -a "$SCANLEVEL" = veryquick ] && return 0
 		pktws_curl_test_update $testf $domain $pre ${FAKE:+--blob=$fake:@"$FAKE" }$PAYLOAD --lua-desync=fake:blob=$fake:$fooling:repeats=$FAKE_REPEATS --lua-desync=hostfakesplit:${HOSTFAKE:+host=${HOSTFAKE}:}${disorder}nofake1:midhost=midsld:$fooling:repeats=$FAKE_REPEATS $post && ok=1
+		[ "$ok" = 1 -a "$SCANLEVEL" = veryquick ] && return 0
 		pktws_curl_test_update $testf $domain $pre ${FAKE:+--blob=$fake:@"$FAKE" }$PAYLOAD --lua-desync=fake:blob=$fake:$fooling:repeats=$FAKE_REPEATS --lua-desync=hostfakesplit:${HOSTFAKE:+host=${HOSTFAKE}:}${disorder}nofake2:midhost=midsld:$fooling:repeats=$FAKE_REPEATS $post && ok=1
+		[ "$ok" = 1 -a "$SCANLEVEL" = veryquick ] && return 0
 	done
 }
 pktws_hostfake_vary()
@@ -48,6 +54,7 @@ pktws_check_hostfake()
 	done
 	for fooling in $FOOLINGS_TCP; do
 		pktws_hostfake_vary $testf $domain "$fooling" "$pre" && ok=1
+		[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 	done
 	for ttl in $attls; do
 		for f in '' "--payload=empty --out-range=s1<d1 --lua-desync=pktmod:ip${IPVV}_ttl=1"; do
@@ -56,6 +63,7 @@ pktws_check_hostfake()
 				[ "$SCANLEVEL" = force ] || break
 			}
 		done
+		[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 	done
 	[ "$ok" = 1 ]
 }

@@ -70,9 +70,13 @@ pktws_fake_https_vary_()
 	local ok_any=0 testf=$1 domain="$2" fooling="$3" pre="$4" post="$5"
 	shift; shift; shift
 	pktws_curl_test_update $testf $domain ${FAKE_HTTPS:+--blob=$fake:@"$FAKE_HTTPS" }$pre $PAYLOAD --lua-desync=fake:blob=$fake:$fooling:repeats=$FAKE_REPEATS --lua-desync=$splitf:pos=$split $post && ok_any=1
+	[ "$ok_any" = 1 -a "$SCANLEVEL" = veryquick ] && { ok=1; return 0; }
 	pktws_curl_test_update $testf $domain $pre $PAYLOAD --lua-desync=fake:blob=0x00000000:$fooling:repeats=$FAKE_REPEATS --lua-desync=$splitf:pos=$split $post && ok_any=1
+	[ "$ok_any" = 1 -a "$SCANLEVEL" = veryquick ] && { ok=1; return 0; }
 	pktws_curl_test_update $testf $domain ${FAKE_HTTPS:+--blob=$fake:@"$FAKE_HTTPS" }$pre $PAYLOAD --lua-desync=fake:blob=0x00000000:$fooling:repeats=$FAKE_REPEATS --lua-desync=fake:blob=$fake:$fooling:tls_mod=rnd,dupsid:repeats=$FAKE_REPEATS --lua-desync=$splitf:pos=$split $post && ok_any=1
+	[ "$ok_any" = 1 -a "$SCANLEVEL" = veryquick ] && { ok=1; return 0; }
 	pktws_curl_test_update $testf $domain ${FAKE_HTTPS:+--blob=$fake:@"$FAKE_HTTPS" }$pre $PAYLOAD --lua-desync=multisplit:blob=$fake:$fooling:pos=2:nodrop:repeats=$FAKE_REPEATS --lua-desync=$splitf:pos=$split $post && ok_any=1
+	[ "$ok_any" = 1 -a "$SCANLEVEL" = veryquick ] && { ok=1; return 0; }
 	pktws_curl_test_update $testf $domain ${FAKE_HTTPS:+--blob=$fake:@"$FAKE_HTTPS" }$pre $PAYLOAD --lua-desync=fake:blob=$fake:$fooling:tls_mod=rnd,dupsid,padencap:repeats=$FAKE_REPEATS --lua-desync=$splitf:pos=$split $post && ok_any=1
 	[ "$ok_any" = 1 ] && ok=1
 }
@@ -122,22 +126,28 @@ pktws_check_https_tls()
 				for f in '' "--payload=empty --out-range=s1<d1 --lua-desync=pktmod:ip${IPVV}_ttl=1"; do
 					pktws_fake_https_vary $testf $domain "ip${IPVV}_ttl=$ttl" "$pre" "$f" && [ "$SCANLEVEL" != force ] && break
 				done
+				[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 			done
 			[ "$ok" = 1 ] && break
 		done
 		for fooling in $FOOLINGS_TCP; do
 			for split in $splits; do
 				pktws_fake_https_vary $testf $domain "$fooling" "$pre"
+				[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 			done
+			[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 		done
 		for ttl in $attls; do
 			for split in $splits; do
 				for f in '' "--payload=empty --out-range=s1<d1 --lua-desync=pktmod:ip${IPVV}_ttl=1"; do
 					pktws_fake_https_vary $testf $domain "ip${IPVV}_autottl=-$ttl,3-20" "$pre" "$f" && [ "$SCANLEVEL" != force ] && break
 				done
+				[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 			done
+			[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 		done
 		[ "$ok" = 1 ] && ok_any=1
+		[ "$SCANLEVEL" = veryquick -a "$ok_any" = 1 ] && break
 	done
 	[ "$ok_any" = 1 ]
 }
