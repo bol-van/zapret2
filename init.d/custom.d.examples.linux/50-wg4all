@@ -1,9 +1,9 @@
-# this custom script runs desync to all wireguard handshake initiation, response and cookie packets
+# this custom script runs desync to all wireguard handshake initiation, response, cookie and keepalive packets
 # NOTE: this works for original wireguard and may not work for 3rd party implementations such as xray
 # NOTE: @ih requires nft 1.0.1+ and updated kernel version. it's confirmed to work on 5.15 (openwrt 23) and not work on 5.10 (openwrt 22)
 
 # can override in config :
-NFQWS_OPT_DESYNC_WG="${NFQWS_OPT_DESYNC_WG:---payload=wireguard_initiation,wireguard_response,wireguard_cookie --lua-desync=fake:blob=0x00000000000000000000000000000000:repeats=2}"
+NFQWS_OPT_DESYNC_WG="${NFQWS_OPT_DESYNC_WG:---payload=wireguard_initiation,wireguard_response,wireguard_cookie,wireguard_keepalive --lua-desync=fake:blob=0x00000000000000000000000000000000:repeats=2}"
 
 alloc_dnum DNUM_WG4ALL
 alloc_qnum QNUM_WG4ALL
@@ -24,6 +24,7 @@ zapret_custom_firewall()
 	fw_nfqws_post $1 "$f 0>>22&0x3C@4>>16=156&&0>>22&0x3C@8=0x01000000" "$f 44>>16=156&&48=0x01000000" $QNUM_WG4ALL
 	fw_nfqws_post $1 "$f 0>>22&0x3C@4>>16=100&&0>>22&0x3C@8=0x02000000" "$f 44>>16=100&&48=0x02000000" $QNUM_WG4ALL
 	fw_nfqws_post $1 "$f 0>>22&0x3C@4>>16=72&&0>>22&0x3C@8=0x03000000" "$f 44>>16=72&&48=0x03000000" $QNUM_WG4ALL
+	fw_nfqws_post $1 "$f 0>>22&0x3C@4>>16=40&&0>>22&0x3C@8=0x04000000" "$f 44>>16=40&&48=0x04000000" $QNUM_WG4ALL
 }
 zapret_custom_firewall_nft()
 {
@@ -34,5 +35,7 @@ zapret_custom_firewall_nft()
 	local f="udp length 100 @ih,0,32 0x02000000"
 	nft_fw_nfqws_post "$f" "$f" $QNUM_WG4ALL
 	local f="udp length 72 @ih,0,32 0x03000000"
+	nft_fw_nfqws_post "$f" "$f" $QNUM_WG4ALL
+	local f="udp length 40 @ih,0,32 0x04000000"
 	nft_fw_nfqws_post "$f" "$f" $QNUM_WG4ALL
 }
