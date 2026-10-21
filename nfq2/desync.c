@@ -17,6 +17,7 @@
 
 #define TCP_MAX_REASM 16384
 #define UDP_MAX_REASM 16384
+#define FASTPATH_RETRANS_THRESHOLD 2
 
 typedef	struct
 {
@@ -631,9 +632,54 @@ static void reasm_client_cancel(t_ctrack *ctrack)
 {
 	reasm_client_stop(ctrack, "reassemble session cancelled\n");
 }
+// discard delayed originals when falling back to a retransmitted fragment
+static void reasm_client_cancel_discard(t_ctrack *ctrack)
+{
+	if (ctrack)
+	{
+		ReasmClear(&ctrack->reasm_client);
+		ctrack->reasm_client_payload = L7P_UNKNOWN;
+		rawpacket_queue_destroy(&ctrack->delayed);
+		DLOG("reassemble session cancelled, delayed packets discarded\n");
+	}
+}
 static void reasm_client_fin(t_ctrack *ctrack)
 {
 	reasm_client_stop(ctrack, "reassemble session finished\n");
+}
+
+
+// A payload-less ACK occupies no sequence space and reveals no payload.
+static bool make_tcp_ack_only(const struct dissect *dis, uint8_t *mod_pkt, size_t *len_mod_pkt)
+{
+	if (!dis || !dis->tcp || (!dis->ip && !dis->ip6)) return false;
+
+	size_t len = dis->len_l3 + dis->len_l4; // all L3 headers (incl. ip6 ext) + TCP header with options
+	if (*len_mod_pkt < len) return false;
+	// dvtws2 uses the same input and output buffer
+	memmove(mod_pkt, dis->data_pkt, len);
+
+	struct tcphdr *tcp = (struct tcphdr *)(mod_pkt + dis->len_l3);
+	tcp->th_flags &= ~TH_PUSH; // PSH without payload is meaningless
+
+	if (dis->ip)
+	{
+		struct ip *ip = (struct ip *)mod_pkt;
+		ip->ip_len = htons((uint16_t)len);
+		ip->ip_sum = 0;
+		ip4_fix_checksum(ip);
+	}
+	else
+	{
+		struct ip6_hdr *ip6 = (struct ip6_hdr *)mod_pkt;
+		ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)(len - sizeof(struct ip6_hdr)));
+	}
+	tcp_fix_checksum(tcp, dis->len_l4,
+		dis->ip ? (struct ip *)mod_pkt : NULL,
+		dis->ip6 ? (struct ip6_hdr *)mod_pkt : NULL);
+
+	*len_mod_pkt = len;
+	return true;
 }
 
 
@@ -787,6 +833,17 @@ static bool ipcache_get_hostname(const struct in_addr *a4, const struct in6_addr
 	else
 		*hostname = 0;
 	return *hostname;
+}
+// fastpath belongs to the local datapath, so autodetection is process-wide
+static bool fastpath_detected(void)
+{
+	return params.fastpath_retrans_count >= FASTPATH_RETRANS_THRESHOLD;
+}
+static void fastpath_update(void)
+{
+	if (fastpath_detected()) return;
+	params.fastpath_retrans_count++;
+	DLOG("updated fastpath counter %u/%u\n", params.fastpath_retrans_count, FASTPATH_RETRANS_THRESHOLD);
 }
 static void ipcache_update_ttl(t_ctrack *ctrack, const struct in_addr *a4, const struct in6_addr *a6, const char *iface)
 {
@@ -1619,6 +1676,21 @@ static uint8_t dpi_desync_tcp_packet_play(
 
 				if (!ReasmIsEmpty(&ps.ctrack->reasm_client))
 				{
+					// Treat retransmission during incomplete reasm as a fastpath bypass.
+					// Discard queued originals to avoid exposing SNI and retry this fragment normally.
+					if (params.fastpath_workaround != FASTPATH_WORKAROUND_OFF &&
+						is_retransmission(&ps.ctrack->pos.client))
+					{
+						if (params.fastpath_workaround == FASTPATH_WORKAROUND_AUTO)
+							fastpath_update();
+						DLOG("retransmission while reasm is incomplete (fastpath steals further fragments). discarding reasm, falling back to single packet desync\n");
+						reasm_client_cancel_discard(ps.ctrack);
+						rdata_payload = dis->data_payload;
+						rlen_payload = dis->len_payload;
+						ps.bHaveHost = TLSHelloExtractHost(rdata_payload, rlen_payload, ps.host, sizeof(ps.host), true);
+						goto rediscover;
+					}
+
 					if (rawpacket_queue(&ps.ctrack->delayed, &ps.dst, fwmark, desync_fwmark, ifin, ifout, dis->data_pkt, dis->len_pkt, dis->len_payload, &ps.ctrack->pos, false))
 					{
 						DLOG("DELAY desync until reasm is complete (#%u)\n", rawpacket_queue_count(&ps.ctrack->delayed));
@@ -1628,13 +1700,37 @@ static uint8_t dpi_desync_tcp_packet_play(
 						// likely exceeded packet limit or unlikely out of memory
 						DLOG_ERR("rawpacket_queue failed !\n");
 						reasm_client_cancel(ps.ctrack);
+						rdata_payload = dis->data_payload;
+						rlen_payload = dis->len_payload;
 						ps.l7payload = L7P_UNKNOWN; // middle packet may be not L7P_TLS_CLIENT_HELLO
 						goto rediscover;
 					}
 					if (ReasmIsFull(&ps.ctrack->reasm_client))
 					{
+						if (params.fastpath_workaround == FASTPATH_WORKAROUND_AUTO && !fastpath_detected())
+							params.fastpath_retrans_count = 0;
 						replay_queue(&ps.ctrack->delayed);
 						reasm_client_fin(ps.ctrack);
+						return VERDICT_DROP;
+					}
+					// On affected hardware DROP activates RTCACHE and later fragments bypass NFQUEUE.
+					// ACK-only placeholders keep the flow on the slow path until replay.
+					if (params.fastpath_workaround == FASTPATH_WORKAROUND_ON ||
+						(params.fastpath_workaround == FASTPATH_WORKAROUND_AUTO && fastpath_detected()))
+					{
+						// control flags are unsafe after removing the payload or before replay
+						if (dis->tcp->th_flags & (TH_FIN | TH_RST | TH_URG))
+						{
+							DLOG("not replacing incomplete reasm fragment with ACK-only because TCP control flags are set\n");
+							return VERDICT_DROP;
+						}
+						if (make_tcp_ack_only(dis, mod_pkt, len_mod_pkt))
+						{
+							DLOG("replacing incomplete reasm fragment with ACK-only packet (hardware fastpath workaround)\n");
+							return VERDICT_MODIFY | VERDICT_NOCSUM;
+						}
+						DLOG_ERR("failed to build ACK-only reasm placeholder. dropping\n");
+						return VERDICT_DROP;
 					}
 					return VERDICT_DROP;
 				}

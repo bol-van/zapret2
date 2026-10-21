@@ -654,6 +654,7 @@ General parameters for all versions - nfqws2, dvtws2, winws2.
  --server=[0|1]                                         ; server mode. modifies various aspects of direction selection and source/destination ip/port for handling listeners
  --ipcache-lifetime=<int>                               ; IP cache entry lifetime in seconds. 0 - unlimited.
  --ipcache-hostname=[0|1]                               ; 1 or no argument enables hostname caching for use in zero-phase strategies
+ --fastpath-workaround=0|1|auto                         ; hardware fastpath workaround for TLS reassembly: 0 - disabled (default), 1 - always enabled, auto - enabled globally after two retransmissions without a successful reassembly between them
  --reasm-disable=[type[,type]]                          ; disable fragment reassembly for a list of payloads: tls_client_hello quic_initial. without arguments - disable reasm for everything.
 
 DESYNC ENGINE INIT:
@@ -1513,6 +1514,12 @@ It is performed automatically by the C code if a payload requiring assembly is e
 Currently, two such payloads are supported: `tls_client_hello` and `quic_initial`. Both may contain Kyber post-quantum cryptography, which is too large to fit into a single packet.
 
 For `tls_client_hello`, standard payload assembly of sequential TCP segments is performed, merging them into a single `reasm_data` block.
+
+On some routers with hardware fastpath (a known case is the Mediatek MT7621 in the Keenetic KN-1011), a DROP verdict for an incomplete TLS reassembly may switch the flow to the hardware path. Subsequent segments then bypass NFQUEUE, so reassembly never completes. `--fastpath-workaround=1` replaces every held segment of an incomplete TLS reassembly with a payload-less TCP ACK. This packet occupies no TCP sequence space and exposes no ClientHello data, while the original segment remains queued for replay after reassembly completes.
+
+The `auto` mode starts with the normal DROP behavior and enables the workaround globally after two retransmissions during incomplete reassembly with no successful reassembly between them. A successful reassembly resets the counter until the threshold is reached; after that, the workaround remains enabled until the process restarts. The default mode is `0`. The workaround is unnecessary on platforms without this problem.
+
+On a retransmission during incomplete reassembly, modes `1` and `auto` cancel reassembly without sending the queued segments and process the current segment on its own. If the SNI was present only in segments that bypassed NFQUEUE, that connection cannot be desynchronized.
 
 For `quic_initial`, individual packets are accumulated in an internal buffer, after which they are decrypted, merged, and defragmented. This handles payload parts scattered across packets and different offsets (a technique used by Chrome to prevent others from oversimplifying their algorithms, ensuring they follow standards and can correctly reassemble payloads from parts).
 
