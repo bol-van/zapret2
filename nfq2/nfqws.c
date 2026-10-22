@@ -50,8 +50,6 @@
 #define NF_ACCEPT 1
 #endif
 
-#define MAX_CONFIG_FILE_SIZE 16384
-
 struct params_s params;
 static volatile sig_atomic_t bReload = false;
 volatile sig_atomic_t bQuit = false;
@@ -1939,32 +1937,76 @@ static void exithelp_clean(void)
 	exithelp();
 }
 
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
-// no static to not allow optimizer to inline this func (save stack)
 void config_from_file(const char *filename)
 {
-	// config from a file
-	char buf[MAX_CONFIG_FILE_SIZE];
+	struct stat st;
+	if (stat(filename, &st) || st.st_size < 0)
+	{
+		DLOG_ERR("could not stat config file '%s'\n", filename);
+		exit_clean(1);
+	}
+	size_t fsize = (size_t)st.st_size;
+	char *buf = malloc(fsize + 3);
+	if (!buf)
+	{
+		DLOG_ERR("out of memory for config file '%s'\n", filename);
+		exit_clean(1);
+	}
 	buf[0] = 'x';	// fake argv[0]
 	buf[1] = ' ';
-	size_t bufsize = sizeof(buf) - 3;
+	size_t bufsize = fsize;
 	if (!load_file(filename, 0, buf + 2, &bufsize))
 	{
+		free(buf);
 		DLOG_ERR("could not load config file '%s'\n", filename);
 		exit_clean(1);
 	}
 	buf[bufsize + 2] = 0;
-	// wordexp fails if it sees \t \n \r between args
+	// strip comment lines (# as first non-space char on a line)
+	for (char *p = buf + 2; *p; )
+	{
+		while (*p == ' ' || *p == '\t') p++;
+		if (*p == '#')
+			while (*p && *p != '\n' && *p != '\r') *p++ = ' ';
+		else
+			while (*p && *p != '\n' && *p != '\r') p++;
+		if (*p) p++;
+	}
 	replace_char(buf, '\n', ' ');
 	replace_char(buf, '\r', ' ');
 	replace_char(buf, '\t', ' ');
-	if (wordexp(buf, &params.wexp, WRDE_NOCMD))
+
+	// count tokens
+	size_t n = 0;
+	for (char *p = buf; *p; )
 	{
-		DLOG_ERR("failed to split command line options from file '%s'\n", filename);
+		while (*p == ' ') p++;
+		if (!*p) break;
+		n++;
+		while (*p && *p != ' ') p++;
+	}
+	char **argv = malloc((n + 1) * sizeof(char *));
+	if (!argv)
+	{
+		DLOG_ERR("out of memory for config argv\n");
+		free(buf);
 		exit_clean(1);
 	}
+	// split in-place
+	size_t i = 0;
+	for (char *p = buf; *p && i < n; )
+	{
+		while (*p == ' ') p++;
+		if (!*p) break;
+		argv[i++] = p;
+		while (*p && *p != ' ') p++;
+		if (*p) *p++ = 0;
+	}
+	argv[n] = NULL;
+	params.config_argv = argv;
+	params.config_argc = n;
+	params.config_buf = buf;
 }
-#endif
 
 static void ApplyDefaultBlobs(struct blob_collection_head *blobs)
 {
@@ -2293,14 +2335,12 @@ int main(int argc, char **argv)
 	dp = &dpl->dp;
 	dp->n = ++desync_profile_count;
 
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
 	if (argc >= 2 && (argv[1][0] == '@' || argv[1][0] == '$'))
 	{
 		config_from_file(argv[1] + 1);
-		argv = params.wexp.we_wordv;
-		argc = params.wexp.we_wordc;
+		argv = params.config_argv;
+		argc = params.config_argc;
 	}
-#endif
 
 #ifdef __CYGWIN__
 	params.windivert_filter = malloc(WINDIVERT_MAX);
@@ -3167,9 +3207,7 @@ fmark_err:
 	}
 
 	// do not need args from file anymore
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
 	cleanup_args(&params);
-#endif
 	argv = NULL; argc = 0;
 
 	if (params.intercept)
