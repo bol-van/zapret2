@@ -13,13 +13,12 @@ static bool addpool(hostlist_pool **hostlist, char **s, const char *end, int *ct
 	// comment line ?
 	if (p<end && *p != '#' && *p != ';' && *p != '/' && *p != '\r' && *p != '\n')
 	{
-		// advance until eol lowering all chars
 		uint32_t flags = 0;
-		if (*p=='^')
-		{
-			p = ++(*s);
-			flags |= HOSTLIST_POOL_FLAG_STRICT_MATCH;
-		}
+		// entry prefixes, any order: '^' = no subdomains, '!' = negation (exception to a shorter entry)
+		for (; p<end && (*p=='^' || *p=='!'); p++)
+			flags |= (*p=='^') ? HOSTLIST_POOL_FLAG_STRICT_MATCH : HOSTLIST_POOL_FLAG_NEGATE;
+		*s = p;
+		// advance until eol lowering all chars
 		for (; p<end && *p && *p!=' ' && *p!='\t' && *p!='\r' && *p != '\n'; p++) *p=tolower((unsigned char)*p);
 		if (!HostlistPoolAddStrLen(hostlist, *s, p-*s, flags))
 		{
@@ -192,38 +191,49 @@ bool LoadAllHostLists()
 
 
 
-static bool SearchHostList(hostlist_pool *hostlist, const char *host, bool no_match_subdomains)
+#define HL_NOT_FOUND    0
+#define HL_FOUND        1
+#define HL_NEGATED      2
+// Search the host in all lists of the collection at once.
+// The longest matching entry wins: go from the full host name up to the top level domain.
+// A negation ('!') in any list cancels all shorter entries in all lists of the collection.
+static int SearchHostLists(const struct hostlist_collection_head *hostlists, const char *kind, const char *host, bool no_match_subdomains)
 {
-	if (hostlist)
+	const char *p = host;
+	const struct hostlist_item *item;
+	const struct hostlist_pool *hp;
+	bool bHostFull=true, bFound;
+
+	while (p)
 	{
-		const char *p = host;
-		const struct hostlist_pool *hp;
-		bool bHostFull=true;
-		while (p)
+		bFound = false;
+		LIST_FOREACH(item, hostlists, next)
 		{
-			DLOG("hostlist check for %s : ", p);
-			hp = HostlistPoolGetStr(hostlist, p);
-			if (hp)
+			DLOG("[%s] %s hostlist check for %s : ", item->hfile->filename ? item->hfile->filename : "fixed", kind, p);
+			hp = HostlistPoolGetStr(item->hfile->hostlist, p);
+			if (!hp)
+				DLOG("negative\n");
+			else if ((hp->flags & HOSTLIST_POOL_FLAG_STRICT_MATCH) && !bHostFull)
+				DLOG("negative : strict_mismatch : %s != %s\n", p, host);
+			else if (hp->flags & HOSTLIST_POOL_FLAG_NEGATE)
 			{
-				if ((hp->flags & HOSTLIST_POOL_FLAG_STRICT_MATCH) && !bHostFull)
-				{
-					DLOG("negative : strict_mismatch : %s != %s\n", p, host);
-				}
-				else
-				{
-					DLOG("positive\n");
-					return true;
-				}
+				DLOG("negated by !%s\n", p);
+				return HL_NEGATED;
 			}
 			else
-				DLOG("negative\n");
-			if (no_match_subdomains) break;
-			p = strchr(p, '.');
-			if (p) p++;
-			bHostFull = false;
+			{
+				DLOG("positive\n");
+				// Do not return yet. A negation in the next list wins
+				bFound = true;
+			}
 		}
+		if (bFound) return HL_FOUND;
+		if (no_match_subdomains) break;
+		p = strchr(p, '.');
+		if (p) p++;
+		bHostFull = false;
 	}
-	return false;
+	return HL_NOT_FOUND;
 }
 
 
@@ -248,7 +258,7 @@ bool HostlistsReloadCheckForProfile(const struct desync_profile *dp)
 // return : true = apply fooling, false = do not apply
 static bool HostlistCheck_(const struct hostlist_collection_head *hostlists, const struct hostlist_collection_head *hostlists_exclude, const char *host, bool no_match_subdomains, bool *excluded, bool bSkipReloadCheck)
 {
-	struct hostlist_item *item;
+	int r;
 
 	if (excluded) *excluded = false;
 
@@ -256,25 +266,18 @@ static bool HostlistCheck_(const struct hostlist_collection_head *hostlists, con
 		if (!HostlistsReloadCheck(hostlists) || !HostlistsReloadCheck(hostlists_exclude))
 			return false;
 
-	LIST_FOREACH(item, hostlists_exclude, next)
+	if (SearchHostLists(hostlists_exclude, "exclude", host, no_match_subdomains)==HL_FOUND)
 	{
-		DLOG("[%s] exclude ", item->hfile->filename ? item->hfile->filename : "fixed");
-		if (SearchHostList(item->hfile->hostlist, host, no_match_subdomains))
-		{
-			if (excluded) *excluded = true;
-			return false;
-		}
+		if (excluded) *excluded = true;
+		return false;
 	}
 	// old behavior compat: all include lists are empty means check passes
 	if (!hostlist_collection_is_empty(hostlists))
 	{
-		LIST_FOREACH(item, hostlists, next)
-		{
-			DLOG("[%s] include ", item->hfile->filename ? item->hfile->filename : "fixed");
-			if (SearchHostList(item->hfile->hostlist, host, no_match_subdomains))
-				return true;
-		}
-		return false;
+		r = SearchHostLists(hostlists, "include", host, no_match_subdomains);
+		// negated host is treated like excluded: autohostlist must neither probe nor learn it
+		if (r==HL_NEGATED && excluded) *excluded = true;
+		return r==HL_FOUND;
 	}
 	return true;
 }

@@ -16,6 +16,7 @@
 #include "kavl.h"
 
 #define HOSTLIST_POOL_FLAG_STRICT_MATCH		1
+#define HOSTLIST_POOL_FLAG_NEGATE			2
 
 #define LIST_TAIL(head, tail, temp) {\
 	tail=LIST_FIRST(head); \

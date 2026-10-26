@@ -874,9 +874,12 @@ On the next request, the host will be treated as if it were in the inclusion lis
 - The SIGHUP signal marks all lists for a forced reload during the processing of the next packet.
 - Each entry for a domain, IP address, or subnet must be on a new line.
 - Hostlists and ipsets support comments. Empty lines and lines starting with `#` are ignored.
-- In hostlists, subdomains are handled automatically. Wildcards (`*`) are not supported. If a domain begins with the `^` symbol, automatic subdomain matching is disabled for that specific entry.
+- In hostlists, subdomains are handled automatically. Wildcards (`*`) are not supported.
+- If a domain begins with the `^` symbol, automatic subdomain matching is disabled for that specific entry.
+- If a domain begins with the `!` symbol, it is a negation: the domain and its subdomains are removed from the match even if a shorter parent domain is listed. For example, the entries `ru` and `!domain.ru` match every `.ru` domain except `domain.ru` and its subdomains. The most specific entry wins, so `sub.domain.ru` can be listed again to bring it back. `!` can be combined with `^` in any order.
+- A negation applies to all lists of the same kind in the profile (all inclusion lists, or all exclusion lists) wherever it is written - in another file or in a fixed list, for example `--hostlist-exclude=list.txt --hostlist-exclude-domains=!domain.ru`. If a domain is in one list and negated in another, the negation wins. A host negated in the inclusion lists is treated like an excluded one: it is not checked for failures and is not added to the autohostlist.
 - ipsets can include both IPv4 and IPv6 addresses and subnets.
-- In the static versions of `--ipset-ip` and `--hostlist-domains`, domains are separated by commas. The `#` and `^` symbols are also supported in static hostlists.
+- In the static versions of `--ipset-ip` and `--hostlist-domains`, domains are separated by commas. The `#`, `^` and `!` symbols are also supported in static hostlists.
 - Gzip compression is supported for all list files.
 
 ### Autohostlist failure detector
