@@ -321,9 +321,8 @@ static struct hostlist_file *RegisterHostlist_(struct hostlist_files_head *hostl
 		if (!(hfile=hostlist_files_search(hostlists, pabs)))
 			if (!(hfile=hostlist_files_add(hostlists, pabs)))
 				return NULL;
-		if (!hostlist_collection_search(hl_collection, pabs))
-			if (!hostlist_collection_add(hl_collection, hfile, b_autolist))
-				return NULL;
+		if (hostlist_collection_search(hl_collection, pabs) || !hostlist_collection_add(hl_collection, hfile, b_autolist))
+			return NULL;
 	}
 	else
 	{

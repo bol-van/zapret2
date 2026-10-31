@@ -295,9 +295,8 @@ static struct ipset_file *RegisterIpset_(struct ipset_files_head *ipsets, struct
 		if (!(hfile=ipset_files_search(ipsets, pabs)))
 			if (!(hfile=ipset_files_add(ipsets, pabs)))
 				return NULL;
-		if (!ipset_collection_search(ips_collection, pabs))
-			if (!ipset_collection_add(ips_collection, hfile))
-				return NULL;
+		if (ipset_collection_search(ips_collection, pabs) || !ipset_collection_add(ips_collection, hfile))
+			return NULL;
 	}
 	else
 	{
