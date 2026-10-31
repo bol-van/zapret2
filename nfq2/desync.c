@@ -276,7 +276,7 @@ static bool dp_match(
 	// autohostlist profile matching l3/l4/l7 filter always win if we have a hostname. no matter it matches or not.
 	if (dp->hostlist_auto && match->hostname)
 	{
-		DLOG("autohostlist profile %u (%s) wins because hostname is known\n",dp->n,dp->name);
+		DLOG("autohostlist profile %u (%s) wins because hostname is known\n",dp->n,PROFILE_NAME(dp));
 		return true;
 	}
 
