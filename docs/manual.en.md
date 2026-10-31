@@ -876,7 +876,7 @@ On the next request, the host will be treated as if it were in the inclusion lis
 - Hostlists and ipsets support comments. Empty lines and lines starting with `#` are ignored.
 - In hostlists, subdomains are handled automatically. Wildcards (`*`) are not supported.
 - If a domain begins with the `^` symbol, automatic subdomain matching is disabled for that specific entry.
-- If a domain begins with the `!` symbol, it is local excemption. For example, if you need "com" but do not need "vk.com" - you write "com" and "!vk.com". Local excemptions do not spread across the lists and do not become excludes except only one case - excemption becomes exclude for autohostlist to save it's logic and prevent duplicate addition.
+- If a domain begins with the `!` symbol, it is local excemption. For example, if you need "com" but do not need "vk.com" - you write "com" and "!vk.com". Local excemptions do not spread across the lists and do not join to the opposite list type except only one case - excemption becomes exclude for autohostlist to save it's logic and prevent duplicate addition.
 - `^` and `!` prefixes can be both present in any order.
 - ipsets can include both IPv4 and IPv6 addresses and subnets.
 - In the static versions of `--ipset-ip` and `--hostlist-domains`, domains are separated by commas. The `#`, `^` and `!` symbols are also supported in static hostlists. However there's only one static list per profile and type. Multiple `--hostlist-domains` add to the same list. Domains are unique per list - duplicate records will be discarded despite of their prefixes.
