@@ -353,3 +353,8 @@ v0.9.4.3
 * blockcheck2: pktws guard timer in all OS
 * blockcheck2: request PACE-ing
 * blockcheck2: veryquick scan level
+
+1.0.7
+
+* zapret-obfs: support cgnat in udp2icmp
+* nfqws2: support local excemptions in hostlist - `!` prefix

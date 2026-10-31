@@ -874,9 +874,11 @@ On the next request, the host will be treated as if it were in the inclusion lis
 - The SIGHUP signal marks all lists for a forced reload during the processing of the next packet.
 - Each entry for a domain, IP address, or subnet must be on a new line.
 - Hostlists and ipsets support comments. Empty lines and lines starting with `#` are ignored.
-- In hostlists, subdomains are handled automatically. Wildcards (`*`) are not supported. If a domain begins with the `^` symbol, automatic subdomain matching is disabled for that specific entry.
+- In hostlists, subdomains are handled automatically. Wildcards (`*`) are not supported.
+- If a domain begins with the `^` symbol, automatic subdomain matching is disabled for that specific entry.
+- If a domain begins with the `!` symbol, it is local excemption. For example, if you need "com" but do not need "vk.com" - you write "com" and "!vk.com". Local excemptions do not spread across the lists and do not becoome excludes except only one case - excemption becomes exclude for autohostlist to save it's logic and prevent duplicate addition.
 - ipsets can include both IPv4 and IPv6 addresses and subnets.
-- In the static versions of `--ipset-ip` and `--hostlist-domains`, domains are separated by commas. The `#` and `^` symbols are also supported in static hostlists.
+- In the static versions of `--ipset-ip` and `--hostlist-domains`, domains are separated by commas. The `#`, `^` and `!` symbols are also supported in static hostlists.
 - Gzip compression is supported for all list files.
 
 ### Autohostlist failure detector
