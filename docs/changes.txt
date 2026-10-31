@@ -358,3 +358,4 @@ v0.9.4.3
 
 * zapret-obfs: support cgnat in udp2icmp
 * nfqws2: support local excemptions in hostlist - `!` prefix
+* nfqws2: do not allow registering same file more than once in a single profile for the same list type
