@@ -2589,7 +2589,7 @@ int main(int argc, char **argv)
 			break;
 		case IDX_HOSTLIST:
 			if (bSkip) break;
-			if (!RegisterHostlist(dp, false, optarg))
+			if (!RegisterHostlist(dp, false, optarg, false))
 			{
 				DLOG_ERR("failed to register hostlist '%s'\n", optarg);
 				exit_clean(1);
@@ -2597,7 +2597,7 @@ int main(int argc, char **argv)
 			break;
 		case IDX_HOSTLIST_DOMAINS:
 			if (bSkip) break;
-			if (!anon_hl && !(anon_hl = RegisterHostlist(dp, false, NULL)))
+			if (!anon_hl && !(anon_hl = RegisterHostlist(dp, false, NULL, false)))
 			{
 				DLOG_ERR("failed to register anonymous hostlist\n");
 				exit_clean(1);
@@ -2610,7 +2610,7 @@ int main(int argc, char **argv)
 			break;
 		case IDX_HOSTLIST_EXCLUDE:
 			if (bSkip) break;
-			if (!RegisterHostlist(dp, true, optarg))
+			if (!RegisterHostlist(dp, true, optarg, false))
 			{
 				DLOG_ERR("failed to register hostlist '%s'\n", optarg);
 				exit_clean(1);
@@ -2618,7 +2618,7 @@ int main(int argc, char **argv)
 			break;
 		case IDX_HOSTLIST_EXCLUDE_DOMAINS:
 			if (bSkip) break;
-			if (!anon_hl_exclude && !(anon_hl_exclude = RegisterHostlist(dp, true, NULL)))
+			if (!anon_hl_exclude && !(anon_hl_exclude = RegisterHostlist(dp, true, NULL, false)))
 			{
 				DLOG_ERR("failed to register anonymous hostlist\n");
 				exit_clean(1);
@@ -2651,7 +2651,7 @@ int main(int argc, char **argv)
 					exit_clean(1);
 				}
 			}
-			if (!(dp->hostlist_auto = RegisterHostlist(dp, false, optarg)))
+			if (!(dp->hostlist_auto = RegisterHostlist(dp, false, optarg, true)))
 			{
 				DLOG_ERR("failed to register hostlist '%s'\n", optarg);
 				exit_clean(1);

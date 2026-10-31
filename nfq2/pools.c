@@ -367,21 +367,25 @@ void hostlist_files_reset_modtime(struct hostlist_files_head *list)
 		FILE_MOD_RESET(&hfile->mod_sig);
 }
 
-static struct hostlist_item *hostlist_collection_entry_alloc(struct hostlist_file *hfile)
+static struct hostlist_item *hostlist_collection_entry_alloc(struct hostlist_file *hfile, bool b_autolist)
 {
 	struct hostlist_item *entry = malloc(sizeof(struct hostlist_item));
-	if (entry) entry->hfile = hfile;
+	if (entry)
+	{
+		entry->hfile = hfile;
+		entry->b_autolist = b_autolist;
+	}
 	return entry;
 }
-struct hostlist_item *hostlist_collection_add(struct hostlist_collection_head *head, struct hostlist_file *hfile)
+struct hostlist_item *hostlist_collection_add(struct hostlist_collection_head *head, struct hostlist_file *hfile, bool b_autolist)
 {
-	struct hostlist_item *entry = hostlist_collection_entry_alloc(hfile);
+	struct hostlist_item *entry = hostlist_collection_entry_alloc(hfile, b_autolist);
 	if (entry) LIST_INSERT_HEAD(head, entry, next);
 	return entry;
 }
 static struct hostlist_item *hostlist_collection_entry_copy(const struct hostlist_item *entry)
 {
-	return hostlist_collection_entry_alloc(entry->hfile);
+	return hostlist_collection_entry_alloc(entry->hfile, entry->b_autolist);
 }
 bool hostlist_collection_copy(struct hostlist_collection_head *to, const struct hostlist_collection_head *from)
 {
