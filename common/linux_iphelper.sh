@@ -3,18 +3,22 @@ IFNAMSIZ=16
 resolve_lower_devices()
 {
 	# $1 - interface name
-	[ -d "/sys/class/net/$1" ] && {
-		find "/sys/class/net/$1" -follow -maxdepth 1 -name "lower_*" |
-		{
-			local l lower lowers
-			while read lower; do
-				lower="$(basename "$lower")"
-				l="${lower#lower_*}"
-				[  "$l" != "$lower" ] && append_separator_list lowers ' ' '' "$l"
-			done
-			printf "$lowers"
-		}
-	}
+
+	[ -d "/sys/class/net/$1" ] || return 0
+
+	local lowers= l path
+
+	for path in "/sys/class/net/$1"/lower_*; do
+		# if no files - glob returns itself
+		[ -e "$path" ] || continue
+
+		l="${path##*/lower_}"
+		if [ -n "$l" ]; then
+			append_separator_list lowers ' ' '' "$l"
+		fi
+	done
+
+	printf '%s' "$lowers"
 }
 is_bridge()
 {
@@ -50,16 +54,18 @@ device_is_wireless()
 }
 resolve_hw_offload_port()
 {
+	# $1 - interface name
+
 	local devname="$1"
 
-	if use_wlan_prefix; then
-		echo -n "$devname"
+	if ! use_wlan_prefix; then
+		printf '%s' "$devname"
 		return
 	fi
 
 	if echo "$devname" | grep -qE '^.+\.sta[0-9]+$'; then
 		local prefix="${devname%.sta*}"
-		echo -n "${prefix}.sta*"
+		printf '%s' "${prefix}.sta*"
 		return
 	fi
 
@@ -67,19 +73,26 @@ resolve_hw_offload_port()
 	local max_len=$((IFNAMSIZ - 5))
 
 	if ! device_is_wireless "$devname" || [ "$dev_len" -ge "$max_len" ]; then
-		echo "$devname"
+		printf '%s' "$devname"
 		return
 	fi
 
-	echo -n "$devname ${devname}.sta*"
+	printf '%s' "$devname ${devname}.sta*"
 }
 
 # copy openwrt behaviour but without netifd query
 resolve_hw_offload()
 {
 	# $1 - interface name
+
+	local dev devs devres d=
 	if is_bridge "$1" || is_vlan "$1" ; then
-		resolve_lower_devices "$1"
+		devs=$(resolve_lower_devices "$1")
+		for dev in $devs; do
+			devres=$(resolve_hw_offload "$dev")
+			[ -n "$devres" ] && d="$d${d:+ }$devres"
+		done
+		printf '%s' "$d"
 	else
 		resolve_hw_offload_port "$1"
 	fi
