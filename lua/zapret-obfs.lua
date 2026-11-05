@@ -173,6 +173,8 @@ end
 -- arg : scode - server icmp code
 -- arg : dataxor - blob to xor udp payload
 -- arg : server=[0|1] - override server mode. by default use "--server" nfqws2 parameter
+-- arg : cgnat - do not rely on identifier - cgnat in most cases changes it. expand udp packet size by 2 (may exceed MTU !)
+-- arg : id_lifetime - mapped identifiers lifetime in seconds
 function udp2icmp(ctx, desync)
 	local dataxor
 	local bserver
@@ -221,6 +223,25 @@ function udp2icmp(ctx, desync)
 			desync.dis.payload = bxor(desync.dis.payload, pattern(dataxor,1,#desync.dis.payload))
 		end
 	end
+	local function map_purge()
+		if udp2icmp_map then
+			local last = udp2icmp_map.purge or 0
+			local now = os.time()
+			local timeout = desync.arg.id_lifetime and tonumber(desync.arg.id_lifetime) or 60
+			if last~=now then
+				for k,v in pairs(udp2icmp_map) do
+					if type(v)=='table' and v.t then
+						if now>=(v.t + timeout) then
+							udp2icmp_map[k] = nil
+						end
+					end
+				end
+				udp2icmp_map.purge=now
+			end
+		end
+	end
+
+	map_purge()
 
 	if desync.arg.dataxor then
 		dataxor = blob(desync,desync.arg.dataxor)
@@ -234,19 +255,63 @@ function udp2icmp(ctx, desync)
 		if b_debug then -- save some cpu
 			DLOG("udp2icmp: udp => icmp sport="..desync.dis.udp.uh_sport.." dport="..desync.dis.udp.uh_dport.." size="..#desync.dis.payload)
 		end
+		local id = bitxor(desync.dis.udp.uh_sport,desync.dis.udp.uh_dport)
+		if desync.arg.cgnat then
+			if bserver then
+				-- extract original icmp identifier from the map. it must match original or NAT will not deliver
+				local map_id = (desync.dis.ip6 and desync.dis.ip6.ip6_dst or desync.dis.ip.ip_dst)..
+					(desync.dis.ip6 and desync.dis.ip6.ip6_src or desync.dis.ip.ip_src)..
+					bu16(desync.dis.udp.uh_dport)..bu16(desync.dis.udp.uh_sport)
+				if udp2icmp_map then
+					local id_ = udp2icmp_map[map_id]
+					if id_ then
+						id=id_.id
+						if b_debug then DLOG(string.format("udp2icmp: found mapped icmp identifier %04X",id)) end
+						id_.t=os.time() -- update time
+					else
+						DLOG("udp2icmp: mapped icmp identifier NOT found !")
+					end
+				end
+				
+			else
+				-- cgnat changes identifier. save it in the end of the packet, expand packet size by 2
+				desync.dis.payload = desync.dis.payload .. bu16(id)
+				DLOG("udp2icmp: expanding udp size to "..#desync.dis.payload)
+			end
+		end
 		desync.dis.icmp = {
 			icmp_type = ictype(true),
 			icmp_code = iccode(true),
-			icmp_data = u32(
-				bu16(bitxor(desync.dis.udp.uh_sport,desync.dis.udp.uh_dport))..
-				(bserver and bu16(desync.dis.udp.uh_sport) or bu16(desync.dis.udp.uh_dport)))
+			icmp_data = u32(bu16(id)..(bserver and bu16(desync.dis.udp.uh_sport) or bu16(desync.dis.udp.uh_dport)))
 		}
 		desync.dis.udp = nil
 		fix_ip_proto(desync.dis)
 		return VERDICT_MODIFY
 	elseif desync.dis.icmp and desync.dis.icmp.icmp_type==ictype(false) and desync.dis.icmp.icmp_code==iccode(false) then
 		local pl = bitand(desync.dis.icmp.icmp_data,0xFFFF)
-		local pm = bitxor(bitrshift(desync.dis.icmp.icmp_data,16),pl)
+		local pm
+		local id = bitrshift(desync.dis.icmp.icmp_data,16)
+		if bserver and desync.arg.cgnat then
+			if #desync.dis.payload<2 then
+				DLOG("udp2icmp: udp is less than 2 bytes and cgnat is on ! doing nothing")
+				return VERDICT_PASS
+			end
+			if not udp2icmp_map then udp2icmp_map={} end
+
+			pm = bitxor(u16(desync.dis.payload,#desync.dis.payload-1),pl) -- use right 2 bytes
+			desync.dis.payload = string.sub(desync.dis.payload,1,-3) -- shrink right 2 bytes
+			DLOG("udp2icmp: shrinking udp size to "..#desync.dis.payload)
+
+			-- keep original icmp identifier indexed by ip/port tuple
+			local map_id = (desync.dis.ip6 and desync.dis.ip6.ip6_src or desync.dis.ip.ip_src)..
+				(desync.dis.ip6 and desync.dis.ip6.ip6_dst or desync.dis.ip.ip_dst)..
+				bu16(pm)..bu16(pl)
+			udp2icmp_map[map_id] = { id=id, t=os.time() }
+			if b_debug then	DLOG(string.format("udp2icmp: stored mapped icmp identifier %04X",id)) end
+		else
+			pm = bitxor(id,pl)
+		end
+
 		desync.dis.udp = {
 			uh_sport = bserver and pm or pl,
 			uh_dport = bserver and pl or pm,
@@ -429,7 +494,7 @@ function synhide(ctx, desync)
 
 	if fl==TH_SYN then
 		-- client sent
-		local ttl = tonumber(desync.dis.ip and desync.arg.ghost or desync.arg.ghost6)
+		local ttl = tonumber(desync.dis.ip and desync.arg.ghost or (desync.dis.ip6 and desync.arg.ghost6))
 		if ttl then
 			DLOG("synhide: punch NAT hole with ttl="..ttl)
 			local dis = deepcopy(desync.dis)

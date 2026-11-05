@@ -35,6 +35,7 @@ pktws_check_faked()
 						[ "$SCANLEVEL" = force ] || break
 					}
 				done
+				[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 			done
 			[ "$ok" = 1 ] && break
 		done
@@ -43,7 +44,9 @@ pktws_check_faked()
 				pktws_curl_test_update $testf $domain ${FAKED_PATTERN:+--blob=faked_pat:@"$FAKED_PATTERN" }$pre $PAYLOAD --lua-desync=$splitf:${FAKED_PATTERN:+pattern=faked_pat:}pos=$split:$fooling && ok=1
 				# duplicate SYN with MD5
 				contains "$fooling" tcp_md5 && pktws_curl_test_update $testf $domain ${FAKED_PATTERN:+--blob=faked_pat:@"$FAKED_PATTERN" }$pre $PAYLOAD --lua-desync=$splitf:${FAKED_PATTERN:+pattern=faked_pat:}pos=$split:$fooling:repeats=$FAKE_REPEATS --payload=empty --out-range="<s1" --lua-desync=send:$TCP_MD5 && ok=1
+				[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 			done
+			[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 		done
 		for ttl in $attls; do
 			for split in $splits; do
@@ -53,10 +56,13 @@ pktws_check_faked()
 						[ "$SCANLEVEL" = force ] || break
 					}
 				done
+				[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 			done
+			[ "$SCANLEVEL" = veryquick -a "$ok" = 1 ] && break
 		done
 		[ $ok = 0 -a "$SCANLEVEL" != force ] && eval need_$splitf=1
 		[ $ok = 1 ] && ok_any=1
+		[ "$SCANLEVEL" = veryquick -a "$ok_any" = 1 ] && break
 	done
 	[ "$ok_any" = 1 ]
 }

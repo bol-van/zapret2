@@ -82,10 +82,10 @@ int fprint_localtime(FILE *F);
 
 typedef struct
 {
-	time_t mod_time;
+	struct timespec mod_time;
 	off_t size;
 } file_mod_sig;
-#define FILE_MOD_COMPARE(ms1,ms2) (((ms1)->mod_time==(ms2)->mod_time) && ((ms1)->size==(ms2)->size))
+#define FILE_MOD_COMPARE(ms1,ms2) (((ms1)->mod_time.tv_sec==(ms2)->mod_time.tv_sec) && ((ms1)->mod_time.tv_nsec==(ms2)->mod_time.tv_nsec) && ((ms1)->size==(ms2)->size))
 #define FILE_MOD_RESET(ms) memset(ms,0,sizeof(file_mod_sig))
 bool file_mod_signature(const char *filename, file_mod_sig *ms);
 bool file_size(const char *filename, off_t *size);

@@ -35,7 +35,7 @@ int unique_ssize_t(ssize_t *pu, int ct) UNIQ_SORT
 
 static int cmp_size_t(const void * a, const void * b)
 {
-	return *(size_t*)a < *(size_t*)b ? -1 : *(size_t*)a > *(size_t*)b;
+	return *(const size_t*)a < *(const size_t*)b ? -1 : *(const size_t*)a > *(const size_t*)b;
 }
 void qsort_size_t(size_t *array, int ct)
 {
@@ -43,7 +43,7 @@ void qsort_size_t(size_t *array, int ct)
 }
 static int cmp_ssize_t(const void * a, const void * b)
 {
-	return *(ssize_t*)a < *(ssize_t*)b ? -1 : *(ssize_t*)a > *(ssize_t*)b;
+	return *(const ssize_t*)a < *(const ssize_t*)b ? -1 : *(const ssize_t*)a > *(const ssize_t*)b;
 }
 void qsort_ssize_t(ssize_t *array, int ct)
 {
@@ -435,7 +435,7 @@ bool file_mod_signature(const char *filename, file_mod_sig *ms)
 		FILE_MOD_RESET(ms);
 		return false;
 	}
-	ms->mod_time = st.st_mtime;
+	ms->mod_time = st.st_mtim;
 	ms->size = st.st_size;
 	return true;
 }

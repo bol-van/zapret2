@@ -146,7 +146,7 @@ static void ConntrackApplyPos(t_ctrack *t, bool bReverse, const struct dissect *
 	{
 		// scale and mss only valid in syn packets
 		scale = tcp_find_scale_factor(dis->tcp);
-		if (scale != SCALE_NONE) direct->scale = scale;
+		if (scale != SCALE_NONE) direct->scale = scale<14 ? scale : 14; // RFC7323 hard limit
 		direct->mss = tcp_find_mss(dis->tcp);
 	}
 	else

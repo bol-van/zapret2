@@ -13,13 +13,21 @@ static bool addpool(hostlist_pool **hostlist, char **s, const char *end, int *ct
 	// comment line ?
 	if (p<end && *p != '#' && *p != ';' && *p != '/' && *p != '\r' && *p != '\n')
 	{
-		// advance until eol lowering all chars
+		// scan for flags
 		uint32_t flags = 0;
-		if (*p=='^')
+		for (;*p=='^' || *p=='!'; p = ++(*s))
 		{
-			p = ++(*s);
-			flags |= HOSTLIST_POOL_FLAG_STRICT_MATCH;
+			switch(*p)
+			{
+				case '^':
+					flags |= HOSTLIST_POOL_FLAG_STRICT_MATCH;
+					break;
+				case '!':
+					flags |= HOSTLIST_POOL_FLAG_EXCEMPT;
+					break;
+			}
 		}
+		// advance until eol lowering all chars
 		for (; p<end && *p && *p!=' ' && *p!='\t' && *p!='\r' && *p != '\n'; p++) *p=tolower((unsigned char)*p);
 		if (!HostlistPoolAddStrLen(hostlist, *s, p-*s, flags))
 		{
@@ -115,8 +123,8 @@ bool AppendHostList(hostlist_pool **hostlist, const char *filename)
 	return true;
 }
 
-// bLoaded is set to true if the list was loaded and not set otherwise
-static bool LoadHostList(struct hostlist_file *hfile, bool *bLoaded)
+// bChanged is set to true if the list was changed and not set otherwise
+static bool LoadHostList(struct hostlist_file *hfile, bool *bChanged)
 {
 	if (hfile->filename)
 	{
@@ -134,6 +142,7 @@ static bool LoadHostList(struct hostlist_file *hfile, bool *bLoaded)
 			DLOG_PERROR("file_open_test");
 			goto unchanged;
 		}
+		if (bChanged) *bChanged=true;
 		// don't want to keep backup copy in memory - it will require *2 RAM. Problem on low-ram devices. It's better to fail hostlist read than have OOM.
 		// if a file can be opened there're few chances it can't be read. fs corruption, disk error, deleted or made inaccessible between 2 syscals ?
 		// it's all hypotetically possible but very unlikely. but OOM is much more real problem on an embedded device if list is large enough
@@ -144,21 +153,20 @@ static bool LoadHostList(struct hostlist_file *hfile, bool *bLoaded)
 			return false;
 		}
 		hfile->mod_sig=fsig;
-		if (bLoaded) *bLoaded=true;
 	}
 	return true;
 unchanged:
 	DLOG_ERR("cannot access hostlist file '%s'. in-memory content remains unchanged.\n",hfile->filename);
 	return true;
 }
-static bool LoadHostLists(struct hostlist_files_head *list, bool *bLoaded)
+static bool LoadHostLists(struct hostlist_files_head *list, bool *bChanged)
 {
 	bool bres=true;
 	struct hostlist_file *hfile;
 
 	LIST_FOREACH(hfile, list, next)
 	{
-		if (!LoadHostList(hfile, bLoaded))
+		if (!LoadHostList(hfile, bChanged))
 			// at least one failed
 			bres=false;
 	}
@@ -183,17 +191,18 @@ static void MakeAutolistsNonEmpty()
 
 bool LoadAllHostLists()
 {
-	bool bLoaded=false;
-	if (!LoadHostLists(&params.hostlists, &bLoaded))
+	bool bChanged=false;
+	if (!LoadHostLists(&params.hostlists, &bChanged))
 		return false;
-	if (bLoaded) MakeAutolistsNonEmpty();
+	if (bChanged) MakeAutolistsNonEmpty();
 	return true;
 }
 
 
 
-static bool SearchHostList(hostlist_pool *hostlist, const char *host, bool no_match_subdomains)
+static bool SearchHostList(hostlist_pool *hostlist, const char *host, bool no_match_subdomains, bool *excempted)
 {
+	if (excempted) *excempted = false;
 	if (hostlist)
 	{
 		const char *p = host;
@@ -211,8 +220,17 @@ static bool SearchHostList(hostlist_pool *hostlist, const char *host, bool no_ma
 				}
 				else
 				{
-					DLOG("positive\n");
-					return true;
+					if (hp->flags & HOSTLIST_POOL_FLAG_EXCEMPT)
+					{
+							DLOG("negative : excemption : %s\n", p);
+							if (excempted) *excempted = true;
+							break;
+					}
+					else
+					{
+						DLOG("positive\n");
+						return true;
+					}
 				}
 			}
 			else
@@ -230,15 +248,15 @@ static bool SearchHostList(hostlist_pool *hostlist, const char *host, bool no_ma
 static bool HostlistsReloadCheck(const struct hostlist_collection_head *hostlists)
 {
 	struct hostlist_item *item;
-	bool bLoaded=false;
+	bool bChanged=false;
 
 	LIST_FOREACH(item, hostlists, next)
 	{
-		if (!LoadHostList(item->hfile, &bLoaded))
+		if (!LoadHostList(item->hfile, &bChanged))
 			return false;
 	}
 	// this is relatively heavy function. walks through all the profiles. do not walk if no hostlists were releaded
-	if (bLoaded) MakeAutolistsNonEmpty();
+	if (bChanged) MakeAutolistsNonEmpty();
 	return true;
 }
 bool HostlistsReloadCheckForProfile(const struct desync_profile *dp)
@@ -249,6 +267,7 @@ bool HostlistsReloadCheckForProfile(const struct desync_profile *dp)
 static bool HostlistCheck_(const struct hostlist_collection_head *hostlists, const struct hostlist_collection_head *hostlists_exclude, const char *host, bool no_match_subdomains, bool *excluded, bool bSkipReloadCheck)
 {
 	struct hostlist_item *item;
+	bool excempted;
 
 	if (excluded) *excluded = false;
 
@@ -259,7 +278,7 @@ static bool HostlistCheck_(const struct hostlist_collection_head *hostlists, con
 	LIST_FOREACH(item, hostlists_exclude, next)
 	{
 		DLOG("[%s] exclude ", item->hfile->filename ? item->hfile->filename : "fixed");
-		if (SearchHostList(item->hfile->hostlist, host, no_match_subdomains))
+		if (SearchHostList(item->hfile->hostlist, host, no_match_subdomains, NULL))
 		{
 			if (excluded) *excluded = true;
 			return false;
@@ -271,8 +290,11 @@ static bool HostlistCheck_(const struct hostlist_collection_head *hostlists, con
 		LIST_FOREACH(item, hostlists, next)
 		{
 			DLOG("[%s] include ", item->hfile->filename ? item->hfile->filename : "fixed");
-			if (SearchHostList(item->hfile->hostlist, host, no_match_subdomains))
+			if (SearchHostList(item->hfile->hostlist, host, no_match_subdomains, &excempted))
 				return true;
+			else if (excluded && excempted && item->b_autolist)
+				// in auto list excempt=exclude
+				*excluded = true;
 		}
 		return false;
 	}
@@ -288,7 +310,7 @@ bool HostlistCheck(const struct desync_profile *dp, const char *host, bool no_ma
 }
 
 
-static struct hostlist_file *RegisterHostlist_(struct hostlist_files_head *hostlists, struct hostlist_collection_head *hl_collection, const char *filename)
+static struct hostlist_file *RegisterHostlist_(struct hostlist_files_head *hostlists, struct hostlist_collection_head *hl_collection, const char *filename, bool b_autolist)
 {
 	struct hostlist_file *hfile;
 	char pabs[PATH_MAX];
@@ -299,21 +321,20 @@ static struct hostlist_file *RegisterHostlist_(struct hostlist_files_head *hostl
 		if (!(hfile=hostlist_files_search(hostlists, pabs)))
 			if (!(hfile=hostlist_files_add(hostlists, pabs)))
 				return NULL;
-		if (!hostlist_collection_search(hl_collection, pabs))
-			if (!hostlist_collection_add(hl_collection, hfile))
-				return NULL;
+		if (hostlist_collection_search(hl_collection, pabs) || !hostlist_collection_add(hl_collection, hfile, b_autolist))
+			return NULL;
 	}
 	else
 	{
 		if (!(hfile=hostlist_files_add(hostlists, NULL)))
 			return NULL;
-		if (!hostlist_collection_add(hl_collection, hfile))
+		if (!hostlist_collection_add(hl_collection, hfile, false))
 			return NULL;
 	}
 
 	return hfile;
 }
-struct hostlist_file *RegisterHostlist(struct desync_profile *dp, bool bExclude, const char *filename)
+struct hostlist_file *RegisterHostlist(struct desync_profile *dp, bool bExclude, const char *filename, bool b_autolist)
 {
 	if (filename && !file_size(filename,NULL))
 	{
@@ -323,7 +344,7 @@ struct hostlist_file *RegisterHostlist(struct desync_profile *dp, bool bExclude,
 	return RegisterHostlist_(
 		&params.hostlists,
 		bExclude ? &dp->hl_collection_exclude : &dp->hl_collection,
-		filename);
+		filename, b_autolist);
 }
 
 static void HostlistsDebugProfile(const struct desync_profile *dp, const char *entity)

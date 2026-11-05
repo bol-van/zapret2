@@ -277,7 +277,7 @@ static bool dp_match(
 	// autohostlist profile matching l3/l4/l7 filter always win if we have a hostname. no matter it matches or not.
 	if (dp->hostlist_auto && match->hostname)
 	{
-		DLOG("autohostlist profile %u (%s) wins because hostname is known\n",dp->n,dp->name);
+		DLOG("autohostlist profile %u (%s) wins because hostname is known\n",dp->n,PROFILE_NAME(dp));
 		return true;
 	}
 
@@ -689,8 +689,8 @@ static uint8_t ct_new_postnat_fix(const t_ctrack *ctrack, const struct dissect *
 	// if used in postnat chain, dropping initial packet will cause conntrack connection teardown
 	// so we need to workaround this.
 	// SYN and SYN,ACK checks are for conntrack-less mode
-	if (ctrack && (params.server ? ctrack->pos.server.pcounter : ctrack->pos.client.pcounter) == 1 ||
-		!ctrack && dis->tcp && (tcp_syn_segment(dis->tcp) || tcp_synack_segment(dis->tcp)))
+	if ((ctrack && (params.server ? ctrack->pos.server.pcounter : ctrack->pos.client.pcounter) == 1) ||
+		(!ctrack && dis->tcp && (tcp_syn_segment(dis->tcp) || tcp_synack_segment(dis->tcp))))
 	{
 		if (dis->len_pkt > *len_mod_pkt)
 			DLOG_ERR("linux postnat conntrack workaround cannot be applied\n");
@@ -762,7 +762,7 @@ static bool check_pos_to(const t_ctrack_position *pos, const struct packet_range
 		if (pos)
 		{
 			ps = pos_get(pos, range->to.mode);
-			return (ps < range->to.pos) || !range->upper_cutoff && (ps == range->to.pos);
+			return (ps < range->to.pos) || (!range->upper_cutoff && (ps == range->to.pos));
 		}
 		else
 			return false;
@@ -1699,11 +1699,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 					{
 						// likely exceeded packet limit or unlikely out of memory
 						DLOG_ERR("rawpacket_queue failed !\n");
-						reasm_client_cancel(ps.ctrack);
-						rdata_payload = dis->data_payload;
-						rlen_payload = dis->len_payload;
-						ps.l7payload = L7P_UNKNOWN; // middle packet may be not L7P_TLS_CLIENT_HELLO
-						goto rediscover;
+						goto reasm_cancel_rediscover;
 					}
 					if (ReasmIsFull(&ps.ctrack->reasm_client))
 					{
@@ -1757,6 +1753,13 @@ pass:
 pass_reasm_cancel:
 	reasm_client_cancel(ps.ctrack);
 	goto pass;
+
+reasm_cancel_rediscover:
+	reasm_client_cancel(ps.ctrack);
+	rdata_payload = dis->data_payload;
+	rlen_payload = dis->len_payload;
+	ps.l7payload = L7P_UNKNOWN; // could be middle packet
+	goto rediscover;
 }
 
 // return : true - should continue, false - should stop with verdict

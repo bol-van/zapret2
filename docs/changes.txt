@@ -341,3 +341,24 @@ v0.9.4.3
 1.0.5.2
 
 * nfqws2: more profile search optimizations
+
+1.0.6
+
+* zapret-lib: dissect quic tvb values that can't fit into 52-bit mantissa into raw strings
+* zapret-lib, nfqws2: treat ? and # characters as domain end in URL
+* blockcheck2: in 10-list.sh try space separated logic as fallback if eval fails (useful for copy-paste from blockcheck2)
+* blockcheck2: CURL_PAD - add junk headers to increase request size and trigger 16-kb block without large downloaded data
+* blockcheck2: in addition to COMMON print COVERAGE section with how many domains worked for each strategy
+* blockcheck2: sweep old temp files after hard kill or crash. sweep ip/nf tables in linux
+* blockcheck2: pktws guard timer in all OS
+* blockcheck2: request PACE-ing
+* blockcheck2: veryquick scan level
+
+1.0.7
+
+* zapret-obfs: support cgnat in udp2icmp
+* nfqws2: support local excemptions in hostlist - `!` prefix
+* nfqws2: do not allow registering same file more than once in a single profile for the same list type
+* init.d: clone latest openwrt resolve_lower_devices behavior for hardware offload
+* winws2: --wf-priority
+* winws2: max windivert filter length reduce from 64K to 16K

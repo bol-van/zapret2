@@ -72,13 +72,13 @@ static uint16_t do_csum(const uint8_t *buff, size_t len)
 			}
 			if (len & 4)
 			{
-				result += *(uint32_t *)buff;
+				result += *(const uint32_t *)buff;
 				buff += 4;
 			}
 		}
 		if (len & 2)
 		{
-			result += *(uint16_t *)buff;
+			result += *(const uint16_t *)buff;
 			buff += 2;
 		}
 	}
@@ -115,8 +115,8 @@ void ip4_fix_checksum(struct ip *ip)
 uint16_t csum_ipv6_magic(const void *saddr, const void *daddr, size_t len, uint8_t proto, uint16_t sum)
 {
 	uint64_t a = (uint64_t)sum + htonl(len + proto) +
-				 *(uint32_t *)saddr + *((uint32_t *)saddr + 1) + *((uint32_t *)saddr + 2) + *((uint32_t *)saddr + 3) +
-				 *(uint32_t *)daddr + *((uint32_t *)daddr + 1) + *((uint32_t *)daddr + 2) + *((uint32_t *)daddr + 3);
+				 *(const uint32_t *)saddr + *((const uint32_t *)saddr + 1) + *((const uint32_t *)saddr + 2) + *((const uint32_t *)saddr + 3) +
+				 *(const uint32_t *)daddr + *((const uint32_t *)daddr + 1) + *((const uint32_t *)daddr + 2) + *((const uint32_t *)daddr + 3);
 	return ~from64to16(a);
 }
 

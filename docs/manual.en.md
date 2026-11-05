@@ -697,8 +697,8 @@ MULTI-STRATEGY:
 
 LUA PACKET PASS MODE:
  --payload=type[,type]                                  ; in-profile filter: payload filter for subsequent instances within the profile
- --out-range=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]  ; in-profile filter: conntrack counter range for subsequent instances within the profile - outgoing direction
- --in-range=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]   ; in-profile filter: conntrack counter range for subsequent instances within the profile - incoming direction
+ --out-range=<mode>[<int>][(-|<)<mode>[<int>]]          ; in-profile filter: conntrack counter range for subsequent instances within the profile - outgoing direction
+ --in-range=<mode>[<int>][(-|<)<mode>[<int>]]           ; in-profile filter: conntrack counter range for subsequent instances within the profile - incoming direction
 
 LUA DESYNC ACTION:
  --lua-desync=<function>[:param1=val1[:param2=val2]]    ; call a LUA instance with the specified parameters during profile processing if in-profile filter conditions are met
@@ -745,6 +745,7 @@ Specific parameters for winws2:
  --wf-filter-lan=0|1                    ; WinDivert constructor: filter out non-global IP addresses. Default is yes.
  --wf-raw=<filter>|@<filename>          ; full WinDivert filter. Overrides the constructor.
  --wf-dup-check[=0|1]                   ; 1 (default) = do not allow duplicate winws2 instances with the same wf filter
+ --wf-priority=<int>                    ; WinDivert filter priority -30000..30000 ( by default - 0 )
  --wf-save=<filename>                   ; save the final complete WinDivert filter to a file
 LOGICAL NETWORK FILTER:
  --ssid-filter=ssid1[,ssid2,ssid3,...]  ; list of WiFi networks; interception is enabled only when connected to these, otherwise it is disabled.
@@ -875,9 +876,12 @@ On the next request, the host will be treated as if it were in the inclusion lis
 - The SIGHUP signal marks all lists for a forced reload during the processing of the next packet.
 - Each entry for a domain, IP address, or subnet must be on a new line.
 - Hostlists and ipsets support comments. Empty lines and lines starting with `#` are ignored.
-- In hostlists, subdomains are handled automatically. Wildcards (`*`) are not supported. If a domain begins with the `^` symbol, automatic subdomain matching is disabled for that specific entry.
+- In hostlists, subdomains are handled automatically. Wildcards (`*`) are not supported.
+- If a domain begins with the `^` symbol, automatic subdomain matching is disabled for that specific entry.
+- If a domain begins with the `!` symbol, it is local excemption. For example, if you need "com" but do not need "vk.com" - you write "com" and "!vk.com". Local excemptions do not spread across the lists and do not join to the opposite list type except only one case - excemption becomes exclude for autohostlist to save it's logic and prevent duplicate addition.
+- `^` and `!` prefixes can be both present in any order.
 - ipsets can include both IPv4 and IPv6 addresses and subnets.
-- In the static versions of `--ipset-ip` and `--hostlist-domains`, domains are separated by commas. The `#` and `^` symbols are also supported in static hostlists.
+- In the static versions of `--ipset-ip` and `--hostlist-domains`, domains are separated by commas. The `#`, `^` and `!` symbols are also supported in static hostlists. However there's only one static list per profile and type. Multiple `--hostlist-domains` add to the same list. Domains are unique per list - duplicate records will be discarded despite of their prefixes.
 - Gzip compression is supported for all list files.
 
 ### Autohostlist failure detector
@@ -1066,7 +1070,7 @@ Names are case-sensitive.
 These come in three types: `--payload`, `--in-range`, and `--out-range`. Filter values remain active from the moment they are specified until the next override.
 
 - `--payload=type1[,type2][,type3]...` accepts a comma-separated list of known [payloads](#protocol-detection), "all", or "known". The default is `--payload=all`.
-- `--(in-range|out-range)=[(n|a|d|s|p)<int>](-|<)[(n|a|d|s|p)<int>]` sets conntrack counter ranges for inbound and outbound directions. The default is `--in-range=x`, `--out-range=a`.
+- `--(in-range|out-range)=<mode>[<int>][(-|<)<mode>[<int>]]` sets conntrack counter ranges for inbound and outbound directions. The default is `--in-range=x`, `--out-range=a`.
 
 Ranges are specified in the following formats: `mX-mY`, `mX<mY`, `-mY`, `<mY`, `mX-`, where `m` is the counter mode, `X` is the lower bound, and `Y` is the upper bound. Modes `x` and `a` are specified as a single letter without a range or counter value. The `-` sign indicates an inclusive upper bound, while `<` indicates an exclusive one.
 
@@ -2257,7 +2261,7 @@ If conntrack is disabled or the packet is not valid tcp or udp, nil is returned.
 function get_source_ip(target)
 ```
 
-Get source IP (raw string) that would be used for connection the the target IP.
+Get source IP (raw string) that would be used for connection to the target IP.
 Returns nil if destination is unreachable.
 
 ```
@@ -2626,9 +2630,9 @@ Performs a linear search in table `a` for value `v`. `array_field_search` assume
 function in_list(s, v)
 ```
 
-### find_next_line
-
 Checks whether string `v` is included in a comma-separated list of strings `s`. For example, `abc` is included in the list `xyz,abc,12345`.
+
+### find_next_line
 
 ```
 function find_next_line(s, pos)
@@ -3471,7 +3475,7 @@ The `ipfrag_options` contain only two standard parameters. The rest are handled 
 
 | Field           | Description                                                                                                         |
 | :-------------- | :------------------------------------------------------------------------------------------------------------------ |
-| ipfrag          | Name of the fragmenter function. If not specified, `ipfrag2` is used. The fragmenter returns an array of dissects (fragments). |
+| ipfrag          | Name of the fragmenter function. If specified with no value, `ipfrag2` is used. The fragmenter returns an array of dissects (fragments). |
 | ipfrag_disorder | Send fragments in reverse order.                                                                                    |
 | ipfrag_pos_udp  | (ipfrag2 fragmenter) UDP fragmentation position. Must be a multiple of 8; defaults to 8.                            |
 | ipfrag_pos_tcp  | (ipfrag2 fragmenter) TCP fragmentation position. Must be a multiple of 8; defaults to 32.                           |
@@ -4213,7 +4217,7 @@ function hostfakesplit(ctx, desync)
 - arg: host - template for [fake host generation](#genhost) - random.template
 - arg: midhost - [marker](#markers) for an additional split of the segment containing the real host.
 - arg: disorder_after - [marker](#markers) for an additional split of the final real part and sending segments in reverse order.
-- arg: nofake, nofake2 - skip sending specific fake packets.
+- arg: nofake1, nofake2 - skip sending specific fake packets.
 - arg: blob - replace the current payload with the specified [blob](#passing-blobs).
 - arg: optional - abort the operation if the blob is specified but missing.
 - arg: nodrop - skip issuing a VERDICT_DROP.
@@ -4428,7 +4432,7 @@ function automate_failure_counter(hrec, crec, fails, maxtime)
 - hrec - [host storage](#automate_host_record)
 - crec - [stream storage](#automate_conn_record)
 - fails - the target number of failures.
-- maxtime - the time in seconds after which, since the last failure, the next failure restarts the count from scratch.
+- time - the time in seconds after which, since the last failure, the next failure restarts the count from scratch.
 
 Returns `true` if the counter reaches the `fails` value. The counter is reset upon returning `true`.
 
@@ -4802,6 +4806,7 @@ Parallel mode is [supported](#shell-variables). In this mode, each attempt is ex
 
 - **standard** - uses a test algorithm that excludes strategies deemed irrelevant based on previous successes or other criteria. In the case of multiple attempts, testing does not stop upon failure. The success rate and curl errors can also provide useful information for situational analysis.
 - **quick** - same as standard, but when using multiple attempts, testing stops after the first failure.
+- **veryquick** - same as quick, and also stops testing further variations of a strategy family (extra TCP foolings, autottl deltas, TTL values, and, where applicable, multisplit/fakedsplit positions and split-mechanisms) as soon as any combination has already succeeded for the current target, instead of continuing through the rest for completeness. Only affects the fake-based strategy families (25-fake.sh, 30-faked.sh, 35-hostfake.sh, 50-fake-multi.sh, 55-fake-faked.sh, 60-fake-hostfake.sh); can make those noticeably faster to test when an early candidate already succeeds, at the cost of not necessarily finding every strategy that would also have succeeded (success here means curl got through - it says nothing about how that strategy will actually do in a real browser).
 - **force** - tests as extensively as possible, regardless of previous test results.
 
 ### Supported protocols
@@ -4935,6 +4940,8 @@ MULTIDISORDER=multidisorder_legacy - replace multidisorder with the version from
 NOTEST_BASIC_HTTP=1 - disable 10-http-basic.sh tests
 NOTEST_MISC_HTTP=1 - disable http 15-misc.sh tests
 NOTEST_MISC_HTTPS=1 - disable https 15-misc.sh tests
+NOTEST_OOB_HTTP=1 - disable http 17-oob.sh tests
+NOTEST_OOB_HTTPS=1 - disable https 17-oob.sh tests
 NOTEST_MULTI_HTTP=1 - disable http 20-multi.sh tests
 NOTEST_MULTI_HTTPS=1 - disable https 20-multi.sh tests
 NOTEST_SEQOVL_HTTP=1 - disable http 23-seqovl.sh tests
@@ -4947,6 +4954,7 @@ NOTEST_FAKED_HTTP=1 - disable http 25-faked.sh tests
 NOTEST_FAKED_HTTPS=1 - disable https 25-faked.sh tests
 NOTEST_HOSTFAKE_HTTP=1 - disable http 35-hostfake.sh tests
 NOTEST_HOSTFAKE_HTTPS=1 - disable https 35-hostfake.sh tests
+HOSTFAKE=host - specify hostname for hostfakesplit
 NOTEST_FAKE_MULTI_HTTP=1 - disable http 50-fake-multi.sh tests
 NOTEST_FAKE_MULTI_HTTPS=1 - disable https 50-fake-multi.sh tests
 NOTEST_FAKE_FAKED_HTTP=1 - disable http 55-fake-faked.sh tests
@@ -4960,53 +4968,55 @@ NOTEST_QUIC=1 - disable 90-quic.sh tests
 
 A simple tester that uses strategy lists from files. Strategies must be on separate lines; line breaks within a single strategy are not allowed. Separate lists are used for different protocols: `list_http.txt`, `list_https_tls12.txt`, `list_https_tls13.txt`, and `list_quic.sh`. These files support comments starting with `#`.
 
-When defining parameters, keep in mind that they will be interpreted as shell arguments. Special characters must be escaped according to shell rules.
-For example, leaving `<` unquoted across the entire parameter or incorrectly quoting the `--luaexec=code=print("abc")` parameter will result in an error. If your Lua code uses strings, it is best to enclose them in single quotes and wrap the entire parameter in double quotes.
+When defining parameters, keep in mind that they will first be tried as shell arguments. Special characters (`<`, `(`, `'`, and similar) are shell syntax and would normally need escaping - for example, leaving `<` unquoted across the entire parameter, or incorrectly quoting the `--luaexec=code=print("abc")` parameter, would previously result in an error. If a line fails this way now, it's automatically retried as a plain, unparsed argument list instead (split only on whitespace, nothing re-interpreted), so strategies containing these characters work whether or not you escape them yourself - copy one straight from `blockcheck2`'s own output and it will just work. Escaping by hand (single quotes around Lua strings, the whole parameter wrapped in double quotes) is still supported and still takes priority when it succeeds, for anyone who wants shell-side expansion inside a list line.
 Note that `blockcheck2` will output strategy parameters without escaping.
 
 The recommended way to use this is to copy it into its own subdirectory within `blockcheck2.d` and populate the `.txt` files with your tests. Then, select your custom test name from the dialog.
 
 ## Summary
 
-At the end of the test, all successful strategies are displayed for each domain and each IP protocol version. If more than one domain was tested, the intersection of successful strategies (those that worked for all) is also provided. However, this intersection can only be fully relied upon when using `SCANLEVEL=force`. Otherwise, strategies that might have worked for subsequent domains might not have been tested for the first one.
+At the end of the test, all successful strategies are displayed for each domain and each IP protocol version. If more than one domain was tested, the intersection of successful strategies (those that worked for all, labeled COMMON) is also provided, together with a COVERAGE listing of every successful strategy and how many of the domains it worked for, most-covered first - useful when testing a set of largely independent targets where no single strategy is expected to satisfy all of them. However, COMMON and the COVERAGE counts can only be fully relied upon when using `SCANLEVEL=force`. Otherwise, strategies that might have worked for subsequent domains might not have been tested for the first one.
 
 ## Shell variables
 
-```
-CURL - path to the curl executable
-CURL_MAX_TIME - curl timeout in seconds
-CURL_MAX_TIME_QUIC - curl timeout for QUIC. If not set, CURL_MAX_TIME is used
-CURL_MAX_TIME_DOH - curl timeout for DoH servers
-CURL_CMD=1 - display curl commands
-CURL_OPT - additional curl options. `-k` to ignore certificates, `-v` for verbose protocol output
-CURL_HTTPS_GET=1 - use the GET method instead of HEAD for HTTPS
-DOMAINS - space-separated list of domains or domains with URIs to test
-TEST - name of the test
-IPVS=4|6|46 - IP protocol versions to test
-ENABLE_HTTP=0|1 - enable plain HTTP test
-ENABLE_HTTPS_TLS12=0|1 - enable HTTPS TLS 1.2 test
-ENABLE_HTTPS_TLS13=0|1 - enable HTTPS TLS 1.3 test
-ENABLE_HTTP3=0|1 - enable QUIC test
-REPEATS - number of test attempts
-PARALLEL=0|1 - enable parallel attempts. May overwhelm the site due to aggressive requests and lead to incorrect results
-SCANLEVEL=quick|standard|force - scanning level
-BATCH=1 - batch mode (no prompts or waiting for console input)
-HTTP_PORT, HTTPS_PORT, QUIC_PORT - port numbers for the respective protocols
-SKIP_DNSCHECK=1 - skip DNS check
-SKIP_IPBLOCK=1 - skip port or IP blocking tests
-PKTWS_EXTRA_POST - additional nfqws/dvtws/winws parameters added after the main strategy
-PKTWS_EXTRA_POST_1 .. PKTWS_EXTRA_POST_9 - separate additional parameters that contain spaces
-PKTWS_EXTRA_PRE - additional nfqws/dvtws/winws parameters added before the main strategy
-PKTWS_EXTRA_PRE_1 .. PKTWS_EXTRA_PRE_9 - separate additional parameters that contain spaces
-DNSCHECK_DNS - space-separated list of third-party DNS servers for DNS spoofing tests
-DNSCHECK_DOM - space-separated list of domains for DNS spoofing tests
-SECURE_DNS=0|1 - force enable or disable DoH
-DOH_SERVERS - space-separated list of DoH URLs for automatic selection of a working server
-DOH_SERVER - specific DoH URL (disables auto-selection)
-UNBLOCKED_DOM - an unblocked domain used for IP block tests
-SIMULATE=1 - enable simulation mode for debugging script logic. Disables real curl requests and replaces them with random results.
-SIM_SUCCESS_RATE=<percent> - simulation success probability as a percentage
-```
+| Variable | Description |
+| :------- | :---------- |
+| CURL | path to the curl executable |
+| CURL_MAX_TIME | curl timeout in seconds |
+| CURL_MAX_TIME_QUIC | curl timeout for QUIC. If not set, CURL_MAX_TIME is used |
+| CURL_MAX_TIME_DOH | curl timeout for DoH servers |
+| CURL_CMD=1 | display curl commands |
+| CURL_OPT | additional curl options. `-k` to ignore certificates, `-v` for verbose protocol output |
+| CURL_HTTPS_GET=1 | use the GET method instead of HEAD for HTTPS |
+| CURL_PAD | pad every curl request with a junk headers of this many bytes. Full length taken into account along with header name, data field and EOL. Useful for testing a "16 KB"-style whitelist block against a target with no large page of its own to download, since that block triggers on total bytes transferred rather than on how much of it was a real response. Independent of CURL_HTTPS_GET; use whichever fits the target |
+| PAD_MAX_HEADER | maximum length in bytes of the data field of one header for CURL_PAD padding. the length can be exceeded by no more than 14 characters for the last header, if the last header together with the name and EOL could be less than 14 characters |
+| PACE | minimum time in msec for a single curl query. allows to slow down hammering to avoid server side ban |
+| DOMAINS | space-separated list of domains or domains with URIs to test |
+| TEST | name of the test |
+| IPVS=4\|6\|46 | IP protocol versions to test |
+| ENABLE_HTTP=0\|1 | enable plain HTTP test |
+| ENABLE_HTTPS_TLS12=0\|1 | enable HTTPS TLS 1.2 test |
+| ENABLE_HTTPS_TLS13=0\|1 | enable HTTPS TLS 1.3 test |
+| ENABLE_HTTP3=0\|1 | enable QUIC test |
+| REPEATS | number of test attempts |
+| PARALLEL=0|1 | enable\ parallel\ attempts. May overwhelm the site due to aggressive requests and lead to incorrect results |
+| SCANLEVEL=quick\|standard\|force | scanning level |
+| BATCH=1 | batch mode (no prompts or waiting for console input) |
+| HTTP_PORT, HTTPS_PORT, QUIC_PORT | port numbers for the respective protocols |
+| SKIP_DNSCHECK=1 | skip DNS check |
+| SKIP_IPBLOCK=1 | skip port or IP blocking tests |
+| PKTWS_EXTRA_POST | additional nfqws/dvtws/winws parameters added after the main strategy |
+| PKTWS_EXTRA_POST_1 .. PKTWS_EXTRA_POST_9 | separate additional parameters that contain spaces |
+| PKTWS_EXTRA_PRE | additional nfqws/dvtws/winws parameters added before the main strategy |
+| PKTWS_EXTRA_PRE_1 .. PKTWS_EXTRA_PRE_9 | separate additional parameters that contain spaces |
+| DNSCHECK_DNS | space-separated list of third-party DNS servers for DNS spoofing tests |
+| DNSCHECK_DOM | space-separated list of domains for DNS spoofing tests |
+| SECURE_DNS=0\|1 | force enable or disable DoH |
+| DOH_SERVERS | space-separated list of DoH URLs for automatic selection of a working server |
+| DOH_SERVER | specific DoH URL (disables auto-selection) |
+| UNBLOCKED_DOM | an unblocked domain used for IP block tests |
+| SIMULATE=1 | enable simulation mode for debugging script logic. Disables real curl requests and replaces them with random results. |
+| SIM_SUCCESS_RATE=\<percent\> | simulation success probability as a percentage |
 
 ## Why it won't open
 

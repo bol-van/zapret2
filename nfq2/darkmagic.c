@@ -1553,7 +1553,7 @@ static bool logical_net_filter_match_rate_limited(void)
 	return logical_net_filter_match();
 }
 
-static HANDLE windivert_init_filter(const char *filter, UINT64 flags)
+static HANDLE windivert_init_filter(const char *filter, INT prio, UINT64 flags)
 {
 	LPSTR errormessage = NULL;
 	HANDLE h, hMutex;
@@ -1563,7 +1563,7 @@ static HANDLE windivert_init_filter(const char *filter, UINT64 flags)
 	hMutex = CreateMutexA(NULL,TRUE,mutex_name);
 	if (hMutex && GetLastError()==ERROR_ALREADY_EXISTS)
 		WaitForSingleObject(hMutex,INFINITE);
-	h = WinDivertOpen(filter, WINDIVERT_LAYER_NETWORK, 0, flags);
+	h = WinDivertOpen(filter, WINDIVERT_LAYER_NETWORK, prio, flags);
 	w_win32_error = GetLastError();
 
 	if (hMutex)
@@ -1600,10 +1600,10 @@ void rawsend_cleanup(void)
 		ovl.hEvent=NULL;
 	}
 }
-bool windivert_init(const char *filter)
+bool windivert_init(const char *filter, INT16 prio)
 {
 	rawsend_cleanup();
-	w_filter = windivert_init_filter(filter, 0);
+	w_filter = windivert_init_filter(filter, prio, 0);
 	if (w_filter)
 	{
 		ovl.hEvent = CreateEventW(NULL,FALSE,FALSE,NULL);

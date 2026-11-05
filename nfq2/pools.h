@@ -16,6 +16,7 @@
 #include "kavl.h"
 
 #define HOSTLIST_POOL_FLAG_STRICT_MATCH		1
+#define HOSTLIST_POOL_FLAG_EXCEMPT		2
 
 #define LIST_TAIL(head, tail, temp) {\
 	tail=LIST_FIRST(head); \
@@ -133,10 +134,11 @@ void hostlist_files_reset_modtime(struct hostlist_files_head *list);
 
 struct hostlist_item {
 	struct hostlist_file *hfile;
+	bool b_autolist;
 	LIST_ENTRY(hostlist_item) next;
 };
 LIST_HEAD(hostlist_collection_head, hostlist_item);
-struct hostlist_item *hostlist_collection_add(struct hostlist_collection_head *head, struct hostlist_file *hfile);
+struct hostlist_item *hostlist_collection_add(struct hostlist_collection_head *head, struct hostlist_file *hfile, bool b_autolist);
 void hostlist_collection_destroy(struct hostlist_collection_head *head);
 bool hostlist_collection_copy(struct hostlist_collection_head *to, const struct hostlist_collection_head *from);
 struct hostlist_item *hostlist_collection_search(struct hostlist_collection_head *head, const char *filename);

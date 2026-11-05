@@ -301,9 +301,10 @@ end
 -- each orchestrated instance must have strategy=N arg, where N starts from 1 and increment without gaps
 -- if 'final' arg is present in an orchestrated instance it stops rotation
 -- arg: fails=N - failture count threshold. default is 3
--- arg: time=<sec> - if last failure happened earlier than `maxtime` seconds ago - reset failure counter. default is 60.
+-- arg: time=<sec> - if last failure happened earlier than `time` seconds ago - reset failure counter. default is 60.
 -- arg: success_detector - success detector function name
 -- arg: failure_detector - failure detector function name
+-- arg: key - a string - table name inside autostate table. to allow multiple orchestrator instances to use single host storage
 -- arg: hostkey - hostkey generator function name
 -- args for failure detector - see standard_failure_detector or your own detector
 -- args for success detector - see standard_success_detector or your own detector
@@ -409,7 +410,7 @@ end
 function cond_tcp_has_ts(desync)
 	return desync.dis.tcp and find_tcp_option(desync.dis.tcp.options, TCP_KIND_TS)
 end
--- exec lua code in "code" arg and return it's result
+-- exec lua code in "cond_code" arg and return it's result
 function cond_lua(desync)
 	if not desync.arg.cond_code then
 		error("cond_lua: no 'cond_code' parameter")
@@ -463,7 +464,7 @@ function condition(ctx, desync)
 end
 -- execute further desync instances.
 -- each instance must have "cond" arg and may optionally have "cond_neg" arg.
--- "cond" - condition function.  "neg" - invert condition function result
+-- "cond" - condition function.  "cond_neg" - invert condition function result
 -- arg: instances - how many instances execute conditionally. all if not defined
 function per_instance_condition(ctx, desync)
 	orchestrate(ctx, desync)
