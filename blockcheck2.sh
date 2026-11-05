@@ -1052,8 +1052,8 @@ pktws_start()
 			# some methods require empty acks
 			# use raw filter to filter target ip addresses in-kernel to allow multiple blockchecks running at the same time
 			# use guard timer to kill unmanaged pktws instances
-			# use low windivert priority in case they did not stop another winws2 instance
-			"$WINWS2" --wf-priority=-2000 --wf-tcp-empty=1 $WF --wf-raw-filter="$WFRAWF" \
+			# use high windivert priority in case they did not stop another winws2 instance
+			"$WINWS2" --wf-priority=2000 --wf-tcp-empty=1 $WF --wf-raw-filter="$WFRAWF" \
 				--lua-init="$GUARD_TIMER" \
 				--lua-init=@"$ZAPRET_BASE/lua/zapret-lib.lua" --lua-init=@"$ZAPRET_BASE/lua/zapret-antidpi.lua" "$@" >/dev/null &
 			;;
