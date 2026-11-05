@@ -744,6 +744,7 @@ Specific parameters for winws2:
  --wf-filter-lan=0|1                    ; WinDivert constructor: filter out non-global IP addresses. Default is yes.
  --wf-raw=<filter>|@<filename>          ; full WinDivert filter. Overrides the constructor.
  --wf-dup-check[=0|1]                   ; 1 (default) = do not allow duplicate winws2 instances with the same wf filter
+ --wf-priority=<int>                    ; WinDivert filter priority -30000..30000 ( by default - 0 )
  --wf-save=<filename>                   ; save the final complete WinDivert filter to a file
 LOGICAL NETWORK FILTER:
  --ssid-filter=ssid1[,ssid2,ssid3,...]  ; list of WiFi networks; interception is enabled only when connected to these, otherwise it is disabled.

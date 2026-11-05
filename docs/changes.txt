@@ -360,3 +360,5 @@ v0.9.4.3
 * nfqws2: support local excemptions in hostlist - `!` prefix
 * nfqws2: do not allow registering same file more than once in a single profile for the same list type
 * init.d: clone latest openwrt resolve_lower_devices behavior for hardware offload
+* winws2: --wf-priority
+* winws2: max windivert filter length reduce from 64K to 16K

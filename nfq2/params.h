@@ -123,7 +123,8 @@ void dp_init(struct desync_profile *dp);
 bool dp_fake_defaults(struct desync_profile *dp);
 void dp_clear(struct desync_profile *dp);
 
-#define WINDIVERT_MAX 65536
+// WINDIVERT_FILTER_MAXLEN=256 (tokens) . even with the longest expressions total length will not exceed 16K. only additional whitespaces can exceed 16K
+#define WINDIVERT_MAX 16384
 #define WINDIVERT_PORTFILTER_MAX 4096
 
 struct params_s
@@ -160,6 +161,7 @@ struct params_s
 	char *wf_pf_tcp_src_out, *wf_pf_tcp_dst_out, *wf_pf_udp_src_out, *wf_pf_udp_dst_out;
 	char *wf_icf_in, *wf_icf_out, *wf_ipf_in, *wf_ipf_out;
 	char *wf_raw_filter;
+	int16_t wf_priority;
 #else
 	bool droproot;
 	char *user;

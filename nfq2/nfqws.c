@@ -905,7 +905,7 @@ static int win_main(void)
 			DLOG_CONDUP("logical network now present\n");
 		}
 
-		if (!windivert_init(params.windivert_filter))
+		if (!windivert_init(params.windivert_filter,params.wf_priority))
 		{
 			res=w_win32_error; goto ex;
 		}
@@ -1859,6 +1859,7 @@ static void exithelp(void)
 		" --wf-raw-filter=<filter>|@<filename>\t\t\t; partial raw windivert filter combined by AND. only one allowed\n"
 		" --wf-filter-lan=0|1\t\t\t\t\t; add excluding filter for non-global IP (default : 1)\n"
 		" --wf-filter-loopback=0|1\t\t\t\t; add excluding filter for loopback (default : 1)\n"
+		" --wf-priority=<int>\t\t\t\t\t; windivert filter priority -30000..30000 (default : 0)\n"
 		" --wf-raw=<filter>|@<filename>\t\t\t\t; full raw windivert filter string or filename. replaces --wf-tcp,--wf-udp,--wf-raw-part\n"
 		" --wf-dup-check=0|1\t\t\t\t\t; 1 (default) = do not allow duplicate winws2 instances with the same wf filter\n"
 		" --wf-save=<filename>\t\t\t\t\t; save windivert filter string to a file and exit\n"
@@ -2078,6 +2079,7 @@ enum opt_indices {
 	IDX_WF_FILTER_LAN,
 	IDX_WF_FILTER_LOOPBACK,
 	IDX_WF_DUP_CHECK,
+	IDX_WF_PRIORITY,
 	IDX_WF_SAVE,
 	IDX_SSID_FILTER,
 	IDX_SSID_FILTER_NEG,
@@ -2185,6 +2187,7 @@ static const struct option long_options[] = {
 	[IDX_WF_RAW_FILTER] = {"wf-raw-filter", required_argument, 0, 0},
 	[IDX_WF_FILTER_LAN] = {"wf-filter-lan", required_argument, 0, 0},
 	[IDX_WF_FILTER_LOOPBACK] = {"wf-filter-loopback", required_argument, 0, 0},
+	[IDX_WF_PRIORITY] = {"wf-priority", required_argument, 0, 0},
 	[IDX_WF_SAVE] = {"wf-save", required_argument, 0, 0},
 	[IDX_WF_DUP_CHECK] = {"wf-dup-check", optional_argument, 0, 0},
 	[IDX_SSID_FILTER] = {"ssid-filter", required_argument, 0, 0},
@@ -3105,6 +3108,17 @@ fmark_err:
 		case IDX_WF_FILTER_LOOPBACK:
 			wf_filter_loopback = !!atoi(optarg);
 			break;
+		case IDX_WF_PRIORITY:
+			{
+				int i = atoi(optarg);
+				if (i>30000 || i<-30000)
+				{
+					DLOG_ERR("wf_priority must be -30000..30000\n");
+					exit_clean(1);
+				}
+				params.wf_priority = (int16_t)i;
+				break;
+			}
 		case IDX_WF_SAVE:
 			strncpy(wf_save_file, optarg, sizeof(wf_save_file));
 			wf_save_file[sizeof(wf_save_file) - 1] = '\0';
