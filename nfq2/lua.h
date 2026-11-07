@@ -115,7 +115,8 @@ bool lua_reconstruct_udphdr(lua_State *L, int idx, struct udphdr *udp);
 bool lua_reconstruct_icmphdr(lua_State *L, int idx, struct icmp46 *icmp);
 bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, bool keepsum, bool badsum, uint8_t last_proto, bool ip6_preserve_next);
 
-typedef struct {
+struct s_lua_desync_context
+{
 	unsigned int func_n;
 	const char *func, *instance;
 	const struct desync_profile *dp;
@@ -123,6 +124,7 @@ typedef struct {
 	t_ctrack *ctrack;
 	bool incoming, cancel;
 	bool valid;
-} t_lua_desync_context;
+};
+typedef struct s_lua_desync_context t_lua_desync_context;
 
 bool lua_instance_cutoff_check(lua_State *L, const t_lua_desync_context *ctx, bool bIn);

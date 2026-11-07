@@ -435,7 +435,7 @@ static bool auto_hostlist_retrans
 				reverse_tcp(tcp);
 				tcp->th_off = sizeof(struct tcphdr)/4; // remove tcp options
 				tcp->th_flags = TH_RST;
-				tcp->th_win = ctrack->pos.server.winsize;
+				tcp->th_win = htons(ctrack->pos.server.winsize);
 				tcp_fix_checksum(tcp, sizeof(struct tcphdr), ip, ip6);
 
 				DLOG("sending RST to retransmitter. ifname=%s\n", ifclient ? ifclient : "");
@@ -934,10 +934,7 @@ static uint8_t desync(
 
 	if (LIST_FIRST(&dp->lua_desync))
 	{
-		lua_rawgeti(params.L, LUA_REGISTRYINDEX, params.ref_desync_ctx);
-		t_lua_desync_context *ctx = (t_lua_desync_context *)luaL_checkudata(params.L, -1, "desync_ctx");
-		// this is singleton stored in the registry. safe to pop
-		lua_pop(params.L,1);
+		t_lua_desync_context *ctx = params.desync_ctx_singleton;
 
 		ctx->dp = dp;
 		ctx->ctrack = ctrack;
@@ -1085,6 +1082,17 @@ static uint8_t desync(
 								goto err;
 
 							verdict = verdict_aggregate(verdict, verdict_func);
+
+							if (!ctrack && ctx->ctrack)
+							{
+								// could be updated by conntrack_feed
+								// this branch is not reachable in replay mode because replay REQUIRES ctrack
+								ctrack = ctx->ctrack;
+								bIncoming = ctx->incoming;
+								tpos = &ctrack->pos;
+								pos = (bIncoming ^ params.server) ? &tpos->server : &tpos->client;
+								rpos =(bIncoming ^ params.server) ? &tpos->client : &tpos->server;
+							}
 						}
 						else
 							DLOG("* lua '%s' : payload_type '%s' does not satisfy filter\n", instance, l7payload_str(l7payload));

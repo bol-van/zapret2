@@ -127,6 +127,8 @@ void dp_clear(struct desync_profile *dp);
 #define WINDIVERT_MAX 16384
 #define WINDIVERT_PORTFILTER_MAX 4096
 
+typedef struct s_lua_desync_context t_lua_desync_context;
+
 struct params_s
 {
 #if !defined( __OpenBSD__) && !defined(__ANDROID__)
@@ -204,6 +206,7 @@ struct params_s
 
 	uint64_t lua_gc;
 	int ref_desync_ctx; // desync ctx userdata registry ref
+	t_lua_desync_context *desync_ctx_singleton;
 	lua_State *L;
 };
 

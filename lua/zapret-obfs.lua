@@ -433,7 +433,7 @@ function synhide(ctx, desync)
 	local function make_magic(client)
 		local m
 		-- use client seq0
-		m = client and desync.dis.tcp.th_seq or desync.dis.tcp.th_ack-1
+		m = client and desync.dis.tcp.th_seq or u32add(desync.dis.tcp.th_ack,-1)
 		m = bitxor(bitrshift(m,16),bitand(m,0xFFFF))
 		if m==0 then
 			-- 0 is not acceptable
