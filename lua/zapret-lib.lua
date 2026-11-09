@@ -1455,9 +1455,9 @@ function wsize_rewrite(dis, arg)
 		b = true
 	end
 	if arg.scale then
-		local scale = tonumber(arg.scale)
 		local i = find_tcp_option(dis.tcp.options, TCP_KIND_SCALE)
-		if i then
+		if i and #dis.tcp.options[i].data==1 then
+			local scale = tonumber(arg.scale)
 			local oldscale = u8(dis.tcp.options[i].data)
 			if scale>oldscale then
 				DLOG("wsize_rewrite: not increasing scale factor")
@@ -1705,13 +1705,14 @@ function gzip_file(filename, data, expected_ratio, level, memlevel, compress_blo
 
 	local gz = gzip_init(nil, level, memlevel)
 	if not gz then
+		f:close()
 		error("gzip_file: stream init error")
 	end
 	local off=1
 	repeat
 		local block_size = #data-off+1
 		if block_size>compress_block_size then block_size=compress_block_size end
-		local comp, eof = gzip_deflate(gz, string.sub(data,off,off+block_size-1), block_size / expected_ratio)
+		local comp, eof = gzip_deflate(gz, string.sub(data,off,off+block_size-1), math.ceil(block_size / expected_ratio))
 		if not comp then
 			f:close()
 			gzip_end(gz)

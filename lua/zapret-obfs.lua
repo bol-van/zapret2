@@ -451,7 +451,8 @@ function synhide(ctx, desync)
 		local r = false
 		xorhdr()
 		if magic=="tsecr" then
-			r = make_magic(client)==u16(string.sub(desync.dis.tcp.options[tsidx].data,7))
+			r = #desync.dis.tcp.options[tsidx].data==8 and
+				make_magic(client)==u16(string.sub(desync.dis.tcp.options[tsidx].data,7))
 		elseif magic=="x2" then
 			r = bitand(desync.dis.tcp.th_x2, x2)~=0
 		elseif magic=="urp" then
