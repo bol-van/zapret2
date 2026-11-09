@@ -1195,7 +1195,7 @@ end
 
 -- option : ipfrag.ipfrag_disorder - send fragments from last to first
 function rawsend_dissect_ipfrag(dis, options)
-	if options and options.ipfrag and options.ipfrag.ipfrag and not dis.frag then
+	if options and options.ipfrag and options.ipfrag.ipfrag and not dis.frag_off then
 		local frag_func = options.ipfrag.ipfrag=="" and "ipfrag2" or options.ipfrag.ipfrag
 		if type(_G[frag_func]) ~= "function" then
 			error("rawsend_dissect_ipfrag: ipfrag function '"..tostring(frag_func).."' does not exist")

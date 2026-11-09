@@ -318,18 +318,19 @@ static struct desync_profile *dp_find(
 	};
 	if (params.debug)
 	{
-		char s[INET6_ADDRSTRLEN];
+		char s[INET6_ADDRSTRLEN], s_proto[16];
 		ntopa46(ip, ip6, s, sizeof(s));
+		str_proto_name(s_proto,sizeof(s_proto),l3proto);
 		if (ipr || ipr6)
 		{
 			char sr[INET6_ADDRSTRLEN];
 			ntopa46(ipr, ipr6, sr, sizeof(sr));
 			DLOG("desync profile search for %s ip1=%s ip2=%s port=%u icmp=%u:%u l7proto=%s ssid='%s' mark=0x%08X hostname='%s'\n",
-				proto_name(l3proto), s, sr, port, icmp_type, icmp_code, l7proto_str(l7proto), ssid ? ssid : "", fwmark, hostname ? hostname : "");
+				s_proto, s, sr, port, icmp_type, icmp_code, l7proto_str(l7proto), ssid ? ssid : "", fwmark, hostname ? hostname : "");
 		}
 		else
 			DLOG("desync profile search for %s ip=%s port=%u icmp=%u:%u l7proto=%s ssid='%s' mark=0x%08X hostname='%s'\n",
-				proto_name(l3proto), s, port, icmp_type, icmp_code, l7proto_str(l7proto), ssid ? ssid : "", fwmark, hostname ? hostname : "");
+				s_proto, s, port, icmp_type, icmp_code, l7proto_str(l7proto), ssid ? ssid : "", fwmark, hostname ? hostname : "");
 	}
 	if (bCheckDone) *bCheckDone = false;
 	LIST_FOREACH(dpl, head, next)

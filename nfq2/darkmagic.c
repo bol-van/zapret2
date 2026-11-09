@@ -457,7 +457,7 @@ void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, boo
 	plen = ntohs(ip6->ip6_ctlun.ip6_un1.ip6_un1_plen);
 	*data += sizeof(struct ip6_hdr); *len -= sizeof(struct ip6_hdr); // skip ipv6 base header
 	if (plen < *len) *len = plen;
-	while (*len && !(fr && fr_off)) // need at least one byte for NextHeader field. stop after fragment header if not first fragment
+	while (*len) // need at least one byte for NextHeader field. stop after fragment header if not first fragment
 	{
 		switch (HeaderType)
 		{
@@ -492,6 +492,12 @@ void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, boo
 		}
 		if (*len < hdrlen) return; // error
 		HeaderType = **data;
+		if (fr && fr_off)
+		{
+			// not 1st fragment. stop analyzing header chain
+			if (proto_type) *proto_type = HeaderType;
+			return;
+		}
 		// advance to the next header location
 		*len -= hdrlen;
 		*data += hdrlen;
