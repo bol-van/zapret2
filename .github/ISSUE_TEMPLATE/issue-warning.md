@@ -21,4 +21,4 @@ Discussions - место для обсуждения вопросов между
 Так же будут немедленно удаляться любые issue, связанные с реакцией антивирусов. При агрессии или настойчивости - бан. (подсказка : вирусов нет, удаляйте если не верите)
 
 Here is the place for bugs only. All questions, especially user-like questions (non-technical) go to Discussions.
-There're also no viruses here. All virus claims and everyting non-technical and non-bugs will be instantly deleted, closed or moved to Discussions.
+There're also no viruses here. All virus claims and everything non-technical and non-bugs will be instantly deleted, closed or moved to Discussions.
