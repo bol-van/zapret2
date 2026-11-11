@@ -44,9 +44,6 @@ SYS_unshare,
 #ifdef SYS_setns
 SYS_setns,
 #endif
-#ifdef SYS_chmod
-SYS_chmod,
-#endif
 #ifdef SYS_bpf
 SYS_bpf,
 #endif
@@ -63,6 +60,9 @@ SYS_io_uring_register,
 SYS_userfaultfd,
 #endif
 SYS_fchmod,SYS_fchmodat,
+#ifdef SYS_chmod
+SYS_chmod,
+#endif
 #ifdef SYS_chown
 SYS_chown,
 #endif
