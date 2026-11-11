@@ -38,8 +38,29 @@ SYS_exec_with_loader,
 #ifdef SYS_osf_execve
 SYS_osf_execve,
 #endif
+#ifdef SYS_unshare
+SYS_unshare,
+#endif
+#ifdef SYS_setns
+SYS_setns,
+#endif
 #ifdef SYS_chmod
 SYS_chmod,
+#endif
+#ifdef SYS_bpf
+SYS_bpf,
+#endif
+#ifdef SYS_io_uring_setup
+SYS_io_uring_setup,
+#endif
+#ifdef SYS_io_uring_enter
+SYS_io_uring_enter,
+#endif
+#ifdef SYS_io_uring_register
+SYS_io_uring_register,
+#endif
+#ifdef SYS_userfaultfd
+SYS_userfaultfd,
 #endif
 SYS_fchmod,SYS_fchmodat,
 #ifdef SYS_chown

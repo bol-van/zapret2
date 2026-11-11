@@ -362,3 +362,9 @@ v0.9.4.3
 * init.d: clone latest openwrt resolve_lower_devices behavior for hardware offload
 * winws2: --wf-priority
 * winws2: max windivert filter length reduce from 64K to 16K
+
+1.0.8
+
+* nfqws2: disable more syscalls
+* nfqws2: can_drop_root() now checks /proc/self/setgroups
+
