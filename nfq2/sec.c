@@ -238,19 +238,40 @@ bool dropcaps(void)
 
 #ifndef __CYGWIN__
 
-#ifndef __linux__
+#ifdef __linux__
+
+// user netns check
+static bool is_setgroups_denied(void)
+{
+	char buf[16];
+	int fd = open("/proc/self/setgroups", O_RDONLY);
+	if (fd < 0) return false; // old kernel
+	ssize_t n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n > 0)
+	{
+		buf[n] = 0;
+		if (strncmp(buf, "deny", 4) == 0) return true;
+	}
+	return false;
+}
+
+#else
+
 bool sec_harden(void)
 {
 	// noop
 	return true;
 }
+
 #endif
+
 
 bool can_drop_root(void)
 {
 #ifdef __linux__
 	// has some caps
-	return checkpcap((1ULL<<CAP_SETUID)|(1ULL<<CAP_SETGID));
+	return checkpcap((1ULL<<CAP_SETUID)|(1ULL<<CAP_SETGID)) && !is_setgroups_denied();
 #else
 	// effective root
 	return !geteuid();
