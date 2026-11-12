@@ -59,6 +59,31 @@ SYS_io_uring_register,
 #ifdef SYS_userfaultfd
 SYS_userfaultfd,
 #endif
+SYS_mount,SYS_umount2,
+#ifdef SYS_oldmount
+SYS_oldumount,
+#endif
+#ifdef SYS_mount_setattr
+SYS_mount_setattr,
+#endif
+#ifdef SYS_move_mount
+SYS_move_mount,
+#endif
+#ifdef SYS_fsmount
+SYS_fsmount,
+#endif
+#ifdef SYS_fsopen
+SYS_fsopen,
+#endif
+#ifdef SYS_fsconfig
+SYS_fsconfig,
+#endif
+#ifdef SYS_fsmount
+SYS_fsmount,
+#endif
+#ifdef SYS_fspick
+SYS_fspick,
+#endif
 SYS_fchmod,SYS_fchmodat,
 #ifdef SYS_chmod
 SYS_chmod,
