@@ -22,6 +22,7 @@ select_test_method()
 {
 	local f ELF
 
+	# default and fallback
 	TEST=run
 
 	# ash and dash try to execute invalid executables as a script. they interpret binary garbage with possible negative consequences
@@ -32,8 +33,6 @@ select_test_method()
 		TEST=zsh
 	elif [ "$UNAME" != CYGWIN ]; then
 		if exists hexdump && exists dd; then
-			# macos does not use ELF
-			TEST=elf
 			ELF=
 			ELF_ARCH=
 			for f in /bin/sh /system/bin/sh; do
@@ -43,7 +42,10 @@ select_test_method()
 				}
 			done
 			[ -n "$ELF" ] && ELF_ARCH=$(read_elf_arch "$ELF")
-			[ -n "$ELF_ARCH" ] && return
+			[ -n "$ELF_ARCH" ] && {
+				TEST=elf
+				return
+			}
 		fi
 
 		# find does not use its own shell exec
