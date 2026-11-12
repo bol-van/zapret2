@@ -87,6 +87,7 @@ SYS_fsmount,
 #ifdef SYS_fspick
 SYS_fspick,
 #endif
+SYS_chroot,SYS_pivot_root,
 SYS_fchmod,SYS_fchmodat,
 #ifdef SYS_chmod
 SYS_chmod,
