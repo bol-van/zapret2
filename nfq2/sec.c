@@ -59,6 +59,9 @@ SYS_io_uring_register,
 #ifdef SYS_userfaultfd
 SYS_userfaultfd,
 #endif
+#ifdef SYS_memfd_create
+SYS_memfd_create,
+#endif
 SYS_mount,SYS_umount2,
 #ifdef SYS_oldmount
 SYS_oldumount,
