@@ -24,8 +24,8 @@ bsd: $(SRC_FILES)
 	$(CC) -s $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o mdig $(SRC_FILES) $(LIBS) $(LDFLAGS) $(LDFLAGS_PIE)
 
 mac: $(SRC_FILES)
-	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o mdiga $(SRC_FILES) -target arm64-apple-macos10.8 $(LIBS_BSD) $(LDFLAGS) $(LDFLAGS_PIE)
-	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o mdigx $(SRC_FILES) -target x86_64-apple-macos10.8 $(LIBS_BSD) $(LDFLAGS) $(LDFLAGS_PIE)
+	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o mdiga $(SRC_FILES) -target arm64-apple-macos10.8 $(LDFLAGS)
+	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o mdigx $(SRC_FILES) -target x86_64-apple-macos10.8 $(LDFLAGS)
 	strip mdiga mdigx
 	lipo -create -output mdig mdigx mdiga
 	rm -f mdigx mdiga

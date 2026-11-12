@@ -23,8 +23,8 @@ bsd: $(SRC_FILES)
 	$(CC) -s $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o ip2net $(SRC_FILES) $(LIBS) $(LDFLAGS) $(LDFLAGS_PIE)
 
 mac: $(SRC_FILES)
-	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o ip2neta $(SRC_FILES) -target arm64-apple-macos10.8 $(LIBS) $(LDFLAGS) $(LDFLAGS_PIE)
-	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o ip2netx $(SRC_FILES) -target x86_64-apple-macos10.8 $(LIBS) $(LDFLAGS) $(LDFLAGS_PIE)
+	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o ip2neta $(SRC_FILES) -target arm64-apple-macos10.8 $(LIBS) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(CFLAGS_PIC) $(CFLAGS_BSD) -o ip2netx $(SRC_FILES) -target x86_64-apple-macos10.8 $(LIBS) $(LDFLAGS)
 	strip ip2neta ip2netx
 	lipo -create -output ip2net ip2netx ip2neta
 	rm -f ip2netx ip2neta
