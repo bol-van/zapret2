@@ -143,7 +143,7 @@ if [ ! -d "$BINDIR" ] || ! dir_is_not_empty "$BINDIR" ]; then
 			echo "to compile : make"
 			;;
 		OpenBSD)
-			echo "to compile : make bsd"
+			echo "to compile : install gmake, then 'gmake bsd'"
 			;;
 		CYGWIN*)
 			echo "you need to download release from github or build binaries from source"
