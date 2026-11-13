@@ -99,7 +99,7 @@ static uint16_t do_csum(const uint8_t *buff, size_t len)
 
 #define csum_partial(buff, len) do_csum((const uint8_t*)buff,len)
 
-uint16_t csum_tcpudp_magic(uint32_t saddr, uint32_t daddr, size_t len, uint8_t proto, uint16_t sum)
+static uint16_t csum_tcpudp_magic(uint32_t saddr, uint32_t daddr, size_t len, uint8_t proto, uint16_t sum)
 {
 	return ~from64to16((uint64_t)saddr + daddr + sum + htonl(len + proto));
 }
@@ -114,7 +114,7 @@ void ip4_fix_checksum(struct ip *ip)
 	ip->ip_sum = ip4_compute_csum(ip, ip->ip_hl << 2);
 }
 
-uint16_t csum_ipv6_magic(const void *saddr, const void *daddr, size_t len, uint8_t proto, uint16_t sum)
+static uint16_t csum_ipv6_magic(const void *saddr, const void *daddr, size_t len, uint8_t proto, uint16_t sum)
 {
 	uint64_t a = (uint64_t)sum + htonl(len + proto) +
 				 *(const uint32_t *)saddr + *((const uint32_t *)saddr + 1) + *((const uint32_t *)saddr + 2) + *((const uint32_t *)saddr + 3) +
