@@ -1666,6 +1666,7 @@ function gunzip_file(filename, expected_ratio, read_block_size)
 	local decompressed=""
 	local gz = gunzip_init()
 	if not gz then
+		f:close()
 		error("gunzip_file: stream init error")
 	end
 	repeat

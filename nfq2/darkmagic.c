@@ -492,15 +492,15 @@ void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, boo
 		}
 		if (*len < hdrlen) return; // error
 		HeaderType = **data;
+		// advance to the next header location
+		*len -= hdrlen;
+		*data += hdrlen;
 		if (fr && fr_off)
 		{
 			// not 1st fragment. stop analyzing header chain
 			if (proto_type) *proto_type = HeaderType;
 			return;
 		}
-		// advance to the next header location
-		*len -= hdrlen;
-		*data += hdrlen;
 	}
 	// we have garbage
 }
