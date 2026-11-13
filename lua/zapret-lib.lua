@@ -1093,10 +1093,10 @@ function apply_ip_id(desync, dis, ipid_options, def)
 		if mode == "seq" then
 			if desync.track and ipid_options.ip_id_conn then
 				dis.ip.ip_id = desync.track.lua_state.ip_id or dis.ip.ip_id
-				desync.track.lua_state.ip_id = dis.ip.ip_id + 1
+				desync.track.lua_state.ip_id = u16add(dis.ip.ip_id,1)
 			else
 				dis.ip.ip_id = desync.ip_id or dis.ip.ip_id
-				desync.ip_id = dis.ip.ip_id + 1
+				desync.ip_id = u16add(dis.ip.ip_id,1)
 			end
 		elseif mode == "zero" then
 			dis.ip.ip_id = 0
@@ -1666,7 +1666,6 @@ function gunzip_file(filename, expected_ratio, read_block_size)
 	local decompressed=""
 	local gz = gunzip_init()
 	if not gz then
-		f:close()
 		error("gunzip_file: stream init error")
 	end
 	repeat
@@ -2594,21 +2593,25 @@ function tls_dissect(tls, offset, partialOK)
 		tdis.rec[#tdis.rec+1] = { type = typ, name = tostring(TLS_RECORD_TYPE_NAMES[typ]), len = len, ver = u16(tls, off+1), encrypted = encrypted, data = string.sub(tls, off+5, off+5+len-1) }
 		if typ==TLS_RECORD_TYPE_CHANGE_CIPHER_SPEC then
 			encrypted = true
-		elseif typ==TLS_RECORD_TYPE_HANDSHAKE and not encrypted then
-			-- need 4 bytes for handshake type and 24-bit length
-			if (#tls-off+1)<9 then
+		elseif typ==TLS_RECORD_TYPE_HANDSHAKE and not encrypted and len>0 then
+			if (#tls-off+1)<len then
 				if not partialOK then return end
 				break
 			end
 			local htyp = tls_handshake_type(tls, off + 5)
 			tdis.rec[#tdis.rec].htype = htyp
+			tdis.rec[#tdis.rec].not_first = false
 			if not tdis.handshake then tdis.handshake = {} end
-			local hlen = tls_handshake_len(tls, off + 5)
 			tdis.handshake[htyp] = { type = htyp, name = TLS_HANDSHAKE_TYPE_NAMES[htyp], data = "" }
+			local hlen
 			-- reasm handshake if required
 			while true do
 				tdis.handshake[htyp].data = tdis.handshake[htyp].data .. string.sub(tls, off + 5, off + 5 + len - 1)
-				if #tdis.handshake[htyp].data >= hlen then
+				if not hlen and #tdis.handshake[htyp].data>=4 then
+					-- discovered hlen
+					hlen = tls_handshake_len(tdis.handshake[htyp].data)
+				end
+				if hlen and #tdis.handshake[htyp].data >= hlen then
 					-- reasm complete
 					break
 				end

@@ -60,23 +60,23 @@ static void TLSDebugHandshake(const uint8_t *tls, size_t sz)
 
 	if (TLSFindExtInHandshake(tls, sz, 43, &ext, &len, false))
 	{
-		if (len)
+		if (bServerHello)
 		{
-			if (bServerHello)
+			if (len>=2)
 			{
 				v = pntoh16(ext);
 				DLOG("TLS supported versions ext : %s\n", TLSVersionStr(v));
 			}
-			else
+		}
+		else if (len)
+		{
+			len2 = ext[0];
+			if (len2 < len)
 			{
-				len2 = ext[0];
-				if (len2 < len)
+				for (ext++, len2 &= ~1; len2; len2 -= 2, ext += 2)
 				{
-					for (ext++, len2 &= ~1; len2; len2 -= 2, ext += 2)
-					{
-						v = pntoh16(ext);
-						DLOG("TLS supported versions ext : %s\n", TLSVersionStr(v));
-					}
+					v = pntoh16(ext);
+					DLOG("TLS supported versions ext : %s\n", TLSVersionStr(v));
 				}
 			}
 		}
