@@ -8,13 +8,12 @@ BINDIR="$EXEDIR/$BINS"
 ZAPRET_BASE=${ZAPRET_BASE:-"$EXEDIR"}
 . "$ZAPRET_BASE/common/base.sh"
 
-
 read_elf_arch()
 {
 	# $1 - elf file
 
 	local arch=$(dd if="$1" count=2 bs=1 skip=18 2>/dev/null | hexdump -e '2/1 "%02x"')
-	local bit=$(dd if="$1" count=1 bs=1 skip=4 2>/dev/null | hexdump -e '1/1 "%02x"')
+	local bit=$(dd if="$1" count=2 bs=1 skip=4 2>/dev/null | hexdump -e '2/1 "%02x"')
 	echo $bit$arch
 }
 
@@ -22,17 +21,12 @@ select_test_method()
 {
 	local f ELF
 
-	# default and fallback
 	TEST=run
 
-	# ash and dash try to execute invalid executables as a script. they interpret binary garbage with possible negative consequences
-	# bash and zsh do not do this
-	if exists bash; then
-		TEST=bash
-	elif exists zsh && [ "$UNAME" != CYGWIN ] ; then
-		TEST=zsh
-	elif [ "$UNAME" != CYGWIN ]; then
+	if [ "$UNAME" != CYGWIN ]; then
 		if exists hexdump && exists dd; then
+			# macos does not use ELF
+			TEST=elf
 			ELF=
 			ELF_ARCH=
 			for f in /bin/sh /system/bin/sh; do
@@ -42,10 +36,7 @@ select_test_method()
 				}
 			done
 			[ -n "$ELF" ] && ELF_ARCH=$(read_elf_arch "$ELF")
-			[ -n "$ELF_ARCH" ] && {
-				TEST=elf
-				return
-			}
+			[ -n "$ELF_ARCH" ] && return
 		fi
 
 		# find does not use its own shell exec
@@ -62,8 +53,13 @@ select_test_method()
 				FIND="busybox find"
 			}
 		fi
+	# ash and dash try to execute invalid executables as a script. they interpret binary garbage with possible negative consequences
+	# bash and zsh do not do this
+	elif exists bash; then
+		TEST=bash
+	elif exists zsh && [ "$UNAME" != CYGWIN ] ; then
+		TEST=zsh
 	fi
-
 }
 
 check_dir()
