@@ -19,12 +19,15 @@ read_elf_arch()
 
 select_test_method()
 {
+	# $1 - 1=disable ELF method
+
 	local f ELF
 
 	TEST=run
+	ELF_ARCH=
 
 	if [ "$UNAME" != CYGWIN ]; then
-		if exists hexdump && exists dd; then
+		if exists hexdump && exists dd && [ "$1" != 1 ] ; then
 			# macos does not use ELF
 			TEST=elf
 			ELF=
@@ -171,34 +174,40 @@ case $UNAME in
 		ARCHLIST="my"
 esac
 
-select_test_method
+for no_elf in 0 1; do
+	select_test_method $no_elf
 
+	if [ "$1" = "getarch" ]; then
+		for arch in $ARCHLIST; do
+			[ -d "$BINDIR/$arch" ] || continue
+			if check_dir $arch; then
+				echo $arch
+				exit 0
+			fi
+		done
+	else
+		echo "using arch detect method : $TEST${ELF_ARCH:+ $ELF_ARCH}"
+
+		for arch in $ARCHLIST; do
+			[ -d "$BINDIR/$arch" ] || continue
+			if check_dir $arch; then
+				echo $arch is OK
+				echo installing binaries ...
+				ccp $arch/ip2net ip2net
+				ccp $arch/mdig mdig
+				[ -n "$PKTWS" ] && ccp $arch/$PKTWS nfq2
+				exit 0
+			else
+				echo $arch is NOT OK
+			fi
+		done
+	fi
+	[ "$TEST" = elf ] || break
+done
 if [ "$1" = "getarch" ]; then
-	for arch in $ARCHLIST
-	do
-		[ -d "$BINDIR/$arch" ] || continue
-		if check_dir $arch; then
-	 		echo $arch
-	 		exit 0
-	 	fi
-	done
+	# do not pollute stdout in getarch mode
+	echo >&2 no compatible binaries found
 else
-	echo "using arch detect method : $TEST${ELF_ARCH:+ $ELF_ARCH}"
-
-	for arch in $ARCHLIST
-	do
-		[ -d "$BINDIR/$arch" ] || continue
-		if check_dir $arch; then
-			echo $arch is OK
-			echo installing binaries ...
-			ccp $arch/ip2net ip2net
-			ccp $arch/mdig mdig
-			[ -n "$PKTWS" ] && ccp $arch/$PKTWS nfq2
-	 		exit 0
-		else
-			echo $arch is NOT OK
-		fi
-	done
 	echo no compatible binaries found
 fi
 
