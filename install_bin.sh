@@ -27,7 +27,7 @@ select_test_method()
 	ELF_ARCH=
 
 	if [ "$UNAME" != CYGWIN ]; then
-		if exists hexdump && exists dd && [ "$1" != 1 ] ; then
+		if [ "$1" != 1 ] && exists hexdump && exists dd ; then
 			# macos does not use ELF
 			TEST=elf
 			ELF=
