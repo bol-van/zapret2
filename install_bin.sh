@@ -204,11 +204,7 @@ for no_elf in 0 1; do
 	fi
 	[ "$TEST" = elf ] || break
 done
-if [ "$1" = "getarch" ]; then
-	# do not pollute stdout in getarch mode
-	echo >&2 no compatible binaries found
-else
-	echo no compatible binaries found
-fi
+
+echo >&2 no compatible binaries found
 
 exit 1
