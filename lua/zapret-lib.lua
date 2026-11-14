@@ -1613,7 +1613,11 @@ function tls_client_hello_mod(tls, options)
 		else
 			tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext={}
 		end
-		if not idx_sni then
+		if idx_sni then
+			if not tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis then
+				tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis = { list = {} }
+			end
+		else
 			DLOG("tls_client_hello_mod: no SNI extension. adding")
 			table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext, 1, { type = TLS_EXT_SERVER_NAME, dis = { list = {} } } )
 			idx_sni = 1
