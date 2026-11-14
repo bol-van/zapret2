@@ -1858,30 +1858,26 @@ function dissect_url(url)
 	p1 = string.find(url,"[^ \t]")
 	if not p1 then return nil end
 	pb = p1
-	pstart,pend = string.find(url,"[a-z]+://",p1)
+	pstart,pend = string.find(url,"^[a-z]+://",p1)
 	if pend then
+		-- scheme present : http://...
 		proto = string.sub(url,pstart,pend-3)
 		p1 = pend+1
+	else
+		-- no scheme. everything is URI
+		return { uri = string.sub(url,p1) }
 	end
-	pstart,pend = string.find(url,"[@/]",p1)
+	pstart,pend = string.find(url,"[@/?#]",p1)
 	if pend and string.sub(url,pstart,pend)=='@' then
 		creds = string.sub(url,p1,pend-1)
 		p1 = pend+1
+		pstart,pend = string.find(url,"[/?#]",p1)
 	end
-	pstart,pend = string.find(url,"[/?#]",p1)
 	if pend then
-		if pend==pb then
-			uri = string.sub(url,pb)
-		else
-			uri = string.sub(url,pend)
-			domain = string.sub(url,p1,pend-1)
-		end
+		uri = string.sub(url,pend)
+		domain = string.sub(url,p1,pend-1)
 	else
-		if proto then
-			domain = string.sub(url,p1)
-		else
-			uri = string.sub(url,p1)
-		end
+		domain = string.sub(url,p1)
 	end
 	if domain then
 		pstart,pend = string.find(domain,':',1,true)
