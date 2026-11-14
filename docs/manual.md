@@ -165,6 +165,7 @@
     - [instance_cutoff_shim](#instance_cutoff_shim)
     - [cutoff_shim_check](#cutoff_shim_check)
     - [apply_arg_prefix](#apply_arg_prefix)
+    - [get_desync_instance_id](#get_desync_instance_id)
     - [apply_execution_plan](#apply_execution_plan)
     - [verdict_aggregate](#verdict_aggregate)
     - [plan_instance_execute](#plan_instance_execute)
@@ -3874,6 +3875,15 @@ function apply_arg_prefix(desync)
 
 Выполняет подстановку значений аргументов из desync.arg, начинающихся с `%` и `#`, `\`.
 Функция ставит специальную метку в desync.arg , чтобы избежать двойного разименования. Повторные вызовы безопасны, но не обновляют desync.arg при изменении блобов.
+
+### get_desync_instance_id
+
+```
+function get_desync_instance_id(desync)
+```
+
+Возвращает таблицу, содержащую идентификацию инстанса из desync и его аргументы.
+Поля аналогичны элементу [execution plan](#execution_plan), но отсутствуют внутрипрофильные фильтры.
 
 ### apply_execution_plan
 

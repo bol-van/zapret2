@@ -547,6 +547,7 @@ function repeater(ctx, desync)
 	end
 	-- save plan copy
 	local plancopy = deepcopy(desync.plan)
+	local repeater_instance = get_desync_instance(desync)
 	for r=1,repeats do
 		if not logical_xor(_G[iff](desync), neg) then
 			DLOG("repeater: break by iff")
@@ -561,6 +562,9 @@ function repeater(ctx, desync)
 		until #desync.plan <= ct_end
 		-- rollback desync plan
 		desync.plan = deepcopy(plancopy)
+		-- roolback instance id and args
+		apply_execution_plan(desync, repeater_instance)
+		-- save any other changes in desync. they can be used by iff function
 	end
 	-- remove repeated instances from desync plan
 	for i=1,instances do

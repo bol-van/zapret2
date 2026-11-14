@@ -168,6 +168,7 @@
     - [instance_cutoff_shim](#instance_cutoff_shim)
     - [cutoff_shim_check](#cutoff_shim_check)
     - [apply_arg_prefix](#apply_arg_prefix)
+    - [get_desync_instance_id](#get_desync_instance_id)
     - [apply_execution_plan](#apply_execution_plan)
     - [verdict_aggregate](#verdict_aggregate)
     - [plan_instance_execute](#plan_instance_execute)
@@ -3690,6 +3691,15 @@ function apply_arg_prefix(desync)
 
 Performs substitution of argument values from `desync.arg` that start with `%`, `#`,  `\`.
 Multiple calls are safe but do not update desync.arg if blobs were changed.
+
+### get_desync_instance_id
+
+```
+function get_desync_instance_id(desync)
+```
+
+Returns a table containing the instance identification and its arguments from desync.
+The fields are similar to the [execution plan](#execution_plan) element, but without in-profile filters.
 
 ### apply_execution_plan
 

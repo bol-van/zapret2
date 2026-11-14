@@ -179,6 +179,10 @@ function apply_execution_plan(desync, instance)
 	desync.arg = deepcopy(instance.arg)
 	-- no apply_arg_prefix here because it may refer non-existing blobs
 end
+-- extract instance identification and args from desync
+function get_desync_instance_id(desync)
+	return { func = desync.func, func_n = desync.func_n, func_instance = desync.func_instance, arg = deepcopy(desync.arg) }
+end
 -- produce resulting verdict from 2 verdicts
 function verdict_aggregate(v1, v2)
 	v1 = v1 or VERDICT_PASS
