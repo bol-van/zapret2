@@ -1853,15 +1853,14 @@ function http_reconstruct_req(hdis, unixeol)
 end
 
 function dissect_url(url)
-	local p1,pb,pstart,pend
+	local p1,pstart,pend
 	local proto, creds, domain, port, uri
 	p1 = string.find(url,"[^ \t]")
 	if not p1 then return nil end
-	pb = p1
-	pstart,pend = string.find(url,"^[a-z]+://",p1)
+	pstart,pend = string.find(url,"^[a-zA-Z][a-zA-Z0-9+.-]*://",p1)
 	if pend then
 		-- scheme present : http://...
-		proto = string.sub(url,pstart,pend-3)
+		proto = string.lower(string.sub(url,pstart,pend-3))
 		p1 = pend+1
 	else
 		-- no scheme. everything is URI
