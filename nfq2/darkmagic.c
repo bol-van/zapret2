@@ -439,7 +439,7 @@ bool proto_check_ipv6_payload(const uint8_t *data, size_t len)
 }
 // move to transport protocol
 // proto_type = 0 => error
-void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, bool *frag, uint16_t *frag_off)
+bool proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, bool *frag, uint16_t *frag_off)
 {
 	size_t hdrlen;
 	struct ip6_hdr *ip6 = (struct ip6_hdr*)*data;
@@ -448,7 +448,6 @@ void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, boo
 	bool fr=false;
 	uint8_t HeaderType;
 
-	if (proto_type) *proto_type = 0; // put error in advance
 	if (frag) *frag = false;
 	if (frag_off) *frag_off = 0;
 
@@ -457,7 +456,7 @@ void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, boo
 	plen = ntohs(ip6->ip6_ctlun.ip6_un1.ip6_un1_plen);
 	*data += sizeof(struct ip6_hdr); *len -= sizeof(struct ip6_hdr); // skip ipv6 base header
 	if (plen < *len) *len = plen;
-	while (*len) // need at least one byte for NextHeader field. stop after fragment header if not first fragment
+	do
 	{
 		switch (HeaderType)
 		{
@@ -467,12 +466,12 @@ void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, boo
 		case IPPROTO_MH: // mobility header
 		case IPPROTO_HIP: // Host Identity Protocol Version v2
 		case IPPROTO_SHIM6:
-			if (*len < 2) return; // error
+			if (*len < 2) return false; // error
 			hdrlen = 8 + ((*data)[1] << 3);
 			break;
 		case IPPROTO_FRAGMENT: // fragment. length fixed to 8, hdrlen field defined as reserved
 			hdrlen = 8;
-			if (*len < hdrlen) return; // error
+			if (*len < hdrlen) return false; // error
 			fr_off = ntohs(((struct ip6_frag*)*data)->ip6f_offlg & IP6F_OFF_MASK);
 			fr = ((struct ip6_frag*)*data)->ip6f_offlg & (IP6F_OFF_MASK|IP6F_MORE_FRAG);
 			if (frag_off) *frag_off = fr_off;
@@ -480,29 +479,25 @@ void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, boo
 			break;
 		case IPPROTO_AH:
 			// special case. length in ah header is in 32-bit words minus 2
-			if (*len < 2) return; // error
+			if (*len < 2) return false; // error
 			hdrlen = 8 + ((*data)[1] << 2);
 			break;
-		case IPPROTO_NONE: // no next header
-			return; // error
 		default:
 			// we found some meaningful payload. it can be tcp, udp, icmp or some another exotic shit
-			if (proto_type) *proto_type = HeaderType;
-			return;
+			return true;
 		}
-		if (*len < hdrlen) return; // error
+		if (*len < hdrlen) return false; // error
 		HeaderType = **data;
+		if (proto_type) *proto_type = HeaderType;
 		// advance to the next header location
 		*len -= hdrlen;
 		*data += hdrlen;
-		if (fr && fr_off)
-		{
-			// not 1st fragment. stop analyzing header chain
-			if (proto_type) *proto_type = HeaderType;
-			return;
-		}
-	}
-	// we have garbage
+		if (fr && fr_off) return true; // not 1st fragment. stop analyzing header chain
+	} while (*len);
+
+	// known extension header ends the packet
+	// to be valid it must have 59 (IPPROTO_NONE) in the next header field
+	return HeaderType == IPPROTO_NONE;
 }
 
 uint8_t *proto_find_ip6_exthdr(struct ip6_hdr *ip6, size_t len, uint8_t proto)
@@ -584,8 +579,10 @@ void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis, bo
 		p = data;
 		iplen = ntohs(((struct ip6_hdr*)data)->ip6_ctlun.ip6_un1.ip6_un1_plen) + sizeof(struct ip6_hdr);
 		if (iplen<len) dis->len_pkt = len = iplen;
-		proto_skip_ipv6(&data, &len, &dis->proto, &dis->frag, &dis->frag_off);
+
+		bool good = proto_skip_ipv6(&data, &len, &dis->proto, &dis->frag, &dis->frag_off);
 		dis->len_l3 = data-p;
+		if (!good) return; // nothing to analyze further - it's garbage
 	}
 	else
 	{

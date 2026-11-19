@@ -178,7 +178,7 @@ bool proto_check_ipv4_payload(const uint8_t *data, size_t len);
 void proto_skip_ipv4(const uint8_t **data, size_t *len, bool *frag, uint16_t *frag_off);
 bool proto_check_ipv6(const uint8_t *data, size_t len);
 bool proto_check_ipv6_payload(const uint8_t *data, size_t len);
-void proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, bool *frag, uint16_t *frag_off);
+bool proto_skip_ipv6(const uint8_t **data, size_t *len, uint8_t *proto_type, bool *frag, uint16_t *frag_off);
 uint8_t *proto_find_ip6_exthdr(struct ip6_hdr *ip6, size_t len, uint8_t proto);
 bool proto_check_tcp(const uint8_t *data, size_t len);
 void proto_skip_tcp(const uint8_t **data, size_t *len);
