@@ -547,7 +547,7 @@ function repeater(ctx, desync)
 	end
 	-- save plan copy
 	local plancopy = deepcopy(desync.plan)
-	local repeater_instance = get_desync_instance(desync)
+	local repeater_instance = get_desync_instance_id(desync)
 	for r=1,repeats do
 		if not logical_xor(_G[iff](desync), neg) then
 			DLOG("repeater: break by iff")
