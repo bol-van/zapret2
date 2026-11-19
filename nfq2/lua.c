@@ -2633,7 +2633,14 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 				}
 				udp->uh_ulen = htons((uint16_t)sz);
 				udp_fix_checksum(udp,l-l3,ip,ip6);
-				if (badsum) udp->uh_sum ^= 1 + (random() % 0xFFFF);
+				if (badsum)
+				{
+					// do not allow zero checksum
+					uint16_t old_sum = udp->uh_sum;
+					do
+						udp->uh_sum = 1 + (random() % 0xFFFF);
+					while(udp->uh_sum==old_sum);
+				}
 			}
 			else if (icmp)
 			{
