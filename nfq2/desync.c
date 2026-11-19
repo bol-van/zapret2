@@ -1318,8 +1318,12 @@ static bool play_prolog(
 				if (!hostname && !ps->bReverse)
 				{
 					if (ipcache_get_hostname(ps->sdip4, ps->sdip6, ps->host, sizeof(ps->host), &hostname_is_ip))
-						if (!(hostname = ps->ctrack->hostname = strdup(ps->host)))
+					{
+						if (hostname = ps->ctrack->hostname = strdup(ps->host))
+							ps->ctrack->hostname_is_ip = hostname_is_ip;
+						else
 							DLOG_ERR("strdup(host): out of memory\n");
+					}
 				}
 			}
 			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, hostname, hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark, NULL, NULL, NULL);
