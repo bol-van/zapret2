@@ -504,8 +504,8 @@ end
 -- test case : --in-range=-s1 --lua-desync=circular --lua-desync=stopif:iff=cond_random:strategy=1 --lua-desync=argdebug:strategy=1 --lua-desync=argdebug:strategy=2
 function stopif(ctx, desync)
 	require_iff(desync, "stopif")
-	orchestrate(ctx, desync)
 	if logical_xor(_G[desync.arg.iff](desync), desync.arg.neg) then
+		orchestrate(ctx, desync)
 		DLOG("stopif: true")
 		plan_clear(desync)
 	else
