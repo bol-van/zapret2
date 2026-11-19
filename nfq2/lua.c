@@ -2525,6 +2525,16 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 			lpayload = 0;
 		lua_pop(L, 1);
 		l = data-buf;
+
+		if (ip)
+		{
+			ip->ip_len = htons((uint16_t)l);
+			ip4_fix_checksum(ip);
+		}
+		else if (ip6)
+		{
+			ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)(l-sizeof(struct ip6_hdr)));
+		}
 	}
 	else
 	{
@@ -2686,7 +2696,7 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 			else
 				ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)(l-sizeof(struct ip6_hdr)));
 		}
-	}
+	} // frag
 
 	*len = l;
 	LUA_STACK_GUARD_LEAVE(L, 0)
