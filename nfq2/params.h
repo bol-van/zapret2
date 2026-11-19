@@ -100,6 +100,12 @@ struct desync_profile
 	bool b_hostlist_auto_retrans_maxseq, b_hostlist_auto_incoming_maxseq, b_hostlist_auto_retrans_reset;
 	bool b_hostlist_auto_udp_out, b_hostlist_auto_udp_in;
 	bool b_filter_l3, b_filter_l7;
+#ifdef HAS_FILTER_SSID
+	bool b_filter_ssid_neg;
+#endif
+#ifdef __linux__
+	bool b_filter_mark;
+#endif
 };
 #define PROFILE_NAME(dp) ((dp)->name ? (dp)->name : "noname")
 

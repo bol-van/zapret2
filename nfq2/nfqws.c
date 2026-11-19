@@ -2865,6 +2865,7 @@ int main(int argc, char **argv)
 			break;
 		case IDX_FILTER_SSID_NEG:
 			dp->filter_ssid_neg = !optarg || atoi(optarg);
+			dp->b_filter_ssid_neg = true;
 			break;
 #endif
 #ifdef __linux__
@@ -2880,6 +2881,7 @@ int main(int argc, char **argv)
 			else
 				// no mask - use the whole 32-bit value
 				dp->filter_mark_mask=0xFFFFFFFF;
+			dp->b_filter_mark=true;
 			break;
 fmark_err:
 			DLOG_ERR("filter mark or mask format error\n");

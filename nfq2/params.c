@@ -425,6 +425,17 @@ bool dp_copy(struct desync_profile *to, const struct desync_profile *from)
 	DP_COPY_SIMPLE(hostlist_auto_udp_out)
 	DP_COPY_SIMPLE(hostlist_auto_udp_in)
 	DP_COPY_SIMPLE(filter_l7)
+#ifdef HAS_FILTER_SSID
+	DP_COPY_SIMPLE(filter_ssid_neg)
+#endif
+#ifdef __linux__
+	if (from->b_filter_mark)
+	{
+		to->filter_mark = from->filter_mark;
+		to->filter_mark_mask = from->filter_mark_mask;
+		to->b_filter_mark = true;
+	}
+#endif
 	if (from->b_filter_l3)
 	{
 		if (to->b_filter_l3)
