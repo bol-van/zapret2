@@ -1319,7 +1319,7 @@ static bool play_prolog(
 				{
 					if (ipcache_get_hostname(ps->sdip4, ps->sdip6, ps->host, sizeof(ps->host), &hostname_is_ip))
 					{
-						if (hostname = ps->ctrack->hostname = strdup(ps->host))
+						if ((hostname = ps->ctrack->hostname = strdup(ps->host)))
 							ps->ctrack->hostname_is_ip = hostname_is_ip;
 						else
 							DLOG_ERR("strdup(host): out of memory\n");
