@@ -1919,7 +1919,9 @@ static uint8_t dpi_desync_udp_packet_play(
 
 							if (ps.ctrack && !reasm_disable)
 							{
-								if (bIsHello && !bReqFull && ReasmIsEmpty(&ps.ctrack->reasm_client))
+								if (!bIsHello) goto rediscover_cancel;
+
+								if (!bReqFull && ReasmIsEmpty(&ps.ctrack->reasm_client))
 								{
 									// preallocate max buffer to avoid reallocs that cause memory copy
 									if (!reasm_client_start(ps.ctrack, IPPROTO_UDP, L7P_QUIC_INITIAL, UDP_MAX_REASM, UDP_MAX_REASM, clean, clean_len))
