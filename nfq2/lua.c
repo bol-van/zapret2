@@ -3295,8 +3295,10 @@ static int lua_get_ifaddrs(lua_State *L)
 				lua_rawgeti(L,-1,li);
 				lua_pushf_ipaddr(L, "addr", a->ifa_addr);
 				lua_pushf_ipaddr(L, "netmask", a->ifa_netmask);
-				lua_pushf_ipaddr(L, "broadcast", a->ifa_broadaddr);
-				lua_pushf_ipaddr(L, "dst", a->ifa_dstaddr);
+				if (a->ifa_flags & IFF_BROADCAST)
+					lua_pushf_ipaddr(L, "broadcast", a->ifa_broadaddr);
+				else if (a->ifa_flags & IFF_POINTOPOINT)
+					lua_pushf_ipaddr(L, "dst", a->ifa_dstaddr);
 				lua_pop(L,3);
 			}
 		}
