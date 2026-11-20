@@ -1246,7 +1246,7 @@ function rawsend_dissect_segmented(desync, dis, mss, options)
 		if extra_len >= mss then return false end
 		local max_data = mss - extra_len
 		local urp = discopy.tcp.th_urp
-		local oob = bitand(dis.tcp.th_flags, TH_URG)~=0
+		local oob = bitand(discopy.tcp.th_flags, TH_URG)~=0
 		if #discopy.payload > max_data then
 			local pos=1
 			local len
