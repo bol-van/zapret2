@@ -589,7 +589,7 @@ void init_params(struct params_s *params)
 
 	params->intercept = true;
 #ifdef __linux__
-	params->qnum = -1;
+	params->qnum = 0xFFFFFFFF;
 #elif defined(BSD)
 	params->port = 0;
 #endif

@@ -148,7 +148,7 @@ struct params_s
 	unsigned int fuzz;
 
 #ifdef __linux__
-	int qnum;
+	unsigned int qnum;
 #elif defined(BSD)
 	uint16_t port; // divert port
 #endif

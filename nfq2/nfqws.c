@@ -2392,13 +2392,16 @@ int main(int argc, char **argv)
 			break;
 #ifdef __linux__
 		case IDX_QNUM:
-			params.qnum = atoi(optarg);
-			if (params.qnum < 0 || params.qnum>65535)
+		{
+			int i = atoi(optarg);
+			if (i < 0 || i>65535)
 			{
-				DLOG_ERR("bad qnum\n");
+				DLOG_ERR("bad qnum. must be 0..65535\n");
 				exit_clean(1);
 			}
+			params.qnum = i;
 			break;
+		}
 		case IDX_BIND_FIX4:
 			params.bind_fix4 = true;
 			break;
@@ -3191,7 +3194,7 @@ fmark_err:
 	if (params.intercept)
 	{
 #ifdef __linux__
-		if (params.qnum < 0)
+		if (params.qnum == 0xFFFFFFFF)
 		{
 			DLOG_ERR("Need queue number (--qnum)\n");
 			exit_clean(1);

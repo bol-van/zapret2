@@ -4471,7 +4471,7 @@ static void lua_init_const(void)
 	DLOG("\nLUA NUMERIC:");
 	for (int i=0;i<sizeof(cuint)/sizeof(*cuint);i++)
 	{
-		lua_pushinteger(params.L, (lua_Integer)cuint[i].v);
+		lua_pushlint(params.L, cuint[i].v);
 		lua_setglobal(params.L, cuint[i].name);
 		DLOG(" %s", cuint[i].name);
 	}
