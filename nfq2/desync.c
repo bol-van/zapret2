@@ -1946,16 +1946,12 @@ static uint8_t dpi_desync_udp_packet_play(
 									return ct_new_postnat_fix(ps.ctrack, dis, mod_pkt, len_mod_pkt);
 								}
 							}
-
+							// reasm is not possible here
 							if (bIsHello)
 							{
 								data_decrypt = defrag + hello_offset;
 								len_decrypt = hello_len;
 								ps.bHaveHost = TLSHelloExtractHostFromHandshake(data_decrypt, len_decrypt, ps.host, sizeof(ps.host), true);
-							}
-							else
-							{
-								quic_reasm_cancel(ps.ctrack, "QUIC initial without ClientHello");
 							}
 						}
 						else
@@ -1980,7 +1976,7 @@ static uint8_t dpi_desync_udp_packet_play(
 								}
 								return ct_new_postnat_fix(ps.ctrack, dis, mod_pkt, len_mod_pkt);
 							}
-							quic_reasm_cancel(ps.ctrack, "QUIC initial fragmented CRYPTO");
+							// reasm is not possible here
 						}
 					}
 					else
