@@ -211,7 +211,6 @@ struct dp_match_data
 	const struct in6_addr *ipr6;
 	const char *hostname;
 	const char *ssid;
-	bool *bCheckDone, *bCheckResult, *bExcluded;
 	t_l7proto l7proto;
 	uint32_t fwmark;
 	uint16_t port;
@@ -224,8 +223,6 @@ static bool dp_match(
 	const struct dp_match_data *match)
 {
 	bool bHostlistsEmpty;
-
-	if (match->bCheckDone) *match->bCheckDone = false;
 
 	// fast checks first
 
@@ -287,12 +284,7 @@ static bool dp_match(
 	{
 		// if hostlists are present profile matches only if hostname is known and satisfy profile hostlists
 		if (match->hostname)
-		{
-			if (match->bCheckDone) *match->bCheckDone = true;
-			bool b;
-			b = HostlistCheck(dp, match->hostname, match->bNoSubdom, NULL, true);
-			return b;
-		}
+			return HostlistCheck(dp, match->hostname, match->bNoSubdom, NULL, true);
 	}
 	return false;
 }
@@ -303,8 +295,7 @@ static struct desync_profile *dp_find(
 	const struct in_addr *ipr, const struct in6_addr *ipr6,
 	uint16_t port, uint8_t icmp_type, uint8_t icmp_code,
 	const char *hostname, bool bNoSubdom, t_l7proto l7proto,
-	const char *ssid, uint32_t fwmark,
-	bool *bCheckDone)
+	const char *ssid, uint32_t fwmark)
 {
 	struct desync_profile_list *dpl;
 	struct dp_match_data match = {
@@ -312,8 +303,7 @@ static struct desync_profile *dp_find(
 		.ip=ip, .ip6=ip6, .ipr=ipr, .ipr6=ipr6,
 		.port=port, .icmp_type=icmp_type, .icmp_code=icmp_code,
 		.hostname=hostname, .bNoSubdom=bNoSubdom, .l7proto=l7proto,
-		.ssid=ssid, .fwmark=fwmark,
-		.bCheckDone=bCheckDone
+		.ssid=ssid, .fwmark=fwmark
 	};
 	if (params.debug)
 	{
@@ -331,7 +321,6 @@ static struct desync_profile *dp_find(
 			DLOG("desync profile search for %s ip=%s port=%u icmp=%u:%u l7proto=%s ssid='%s' mark=0x%08X hostname='%s'\n",
 				s_proto, s, port, icmp_type, icmp_code, l7proto_str(l7proto), ssid ? ssid : "", fwmark, hostname ? hostname : "");
 	}
-	if (bCheckDone) *bCheckDone = false;
 	LIST_FOREACH(dpl, head, next)
 	{
 		if (dp_match(&dpl->dp, &match))
@@ -1226,7 +1215,7 @@ struct play_state
 	t_l7payload l7payload;
 	const char *ssid;
 	uint32_t fwmark;
-	bool bReverse, bReverseFixed, bHaveHost, bCheckHost;
+	bool bReverse, bReverseFixed;
 };
 static bool play_prolog(
 	struct play_state *ps,
@@ -1245,7 +1234,8 @@ static bool play_prolog(
 	ps->tpos = tpos;
 	ps->dp = NULL;
 	ps->ctrack = ps->ctrack_replay = NULL;
-	ps->bReverse = ps->bReverseFixed = ps->bHaveHost = ps->bCheckHost = false;
+	*ps->host = 0;
+	ps->bReverse = ps->bReverseFixed = false;
 	ps->l7proto = L7_UNKNOWN;
 	ps->l7payload = dis->len_payload ? L7P_UNKNOWN : L7P_EMPTY;
 	ps->ssid = NULL;
@@ -1271,15 +1261,14 @@ static bool play_prolog(
 		ps->dp = ps->ctrack_replay->dp;
 		if (ps->dp)
 			DLOG("using cached desync profile %u (%s)\n", ps->dp->n, PROFILE_NAME(ps->dp));
-		else if (!ps->ctrack_replay->dp_search_complete)
+		else
 		{
-			ps->dp = ps->ctrack_replay->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, ps->ctrack_replay->hostname, ps->ctrack_replay->hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark, NULL);
-			ps->ctrack_replay->dp_search_complete = true;
-		}
-		if (!ps->dp)
-		{
-			DLOG("matching desync profile not found\n");
-			return false;
+			ps->dp = ps->ctrack_replay->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, ps->ctrack_replay->hostname, ps->ctrack_replay->hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark);
+			if (!ps->dp)
+			{
+				DLOG("matching desync profile not found\n");
+				return false;
+			}
 		}
 	}
 	else
@@ -1306,7 +1295,7 @@ static bool play_prolog(
 		if (ps->ctrack) ps->l7proto = ps->ctrack->l7proto;
 		if (ps->dp)
 			DLOG("using cached desync profile %u (%s)\n", ps->dp->n, PROFILE_NAME(ps->dp));
-		else if (!ps->ctrack || !ps->ctrack->dp_search_complete)
+		else if (!ps->ctrack || !ps->ctrack->dp)
 		{
 			const char *hostname = NULL;
 			bool hostname_is_ip = false;
@@ -1319,21 +1308,14 @@ static bool play_prolog(
 					if (ipcache_get_hostname(ps->sdip4, ps->sdip6, ps->host, sizeof(ps->host), &hostname_is_ip))
 					{
 						if ((hostname = ps->ctrack->hostname = strdup(ps->host)))
-						{
 							ps->ctrack->hostname_is_ip = hostname_is_ip;
-							ps->bCheckHost = true;
-						}
 						else
 							DLOG_ERR("strdup(host): out of memory\n");
 					}
 				}
 			}
-			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, hostname, hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark, NULL);
-			if (ps->ctrack)
-			{
-				ps->ctrack->dp = ps->dp;
-				ps->ctrack->dp_search_complete = true;
-			}
+			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, hostname, hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark);
+			if (ps->ctrack)	ps->ctrack->dp = ps->dp;
 		}
 		if (!ps->dp)
 		{
@@ -1365,10 +1347,19 @@ static bool dp_rediscovery(struct play_state *ps)
 {
 	bool bHostIsIp = false;
 
-	if (ps->bHaveHost)
+	if (*ps->host)
 	{
 		bHostIsIp = strip_host_to_ip(ps->host);
 		DLOG("hostname: %s\n", ps->host);
+		if (ps->ctrack_replay && ps->ctrack_replay->hostname &&
+			(bHostIsIp!=ps->ctrack_replay->hostname_is_ip || strcmp(ps->host, ps->ctrack_replay->hostname)))
+		{
+			DLOG("hostname changed ! previous hostname : %s\n", ps->ctrack_replay->hostname);
+			// force rediscover
+			free(ps->ctrack_replay->hostname);
+			ps->ctrack_replay->hostname = NULL;
+			ps->ctrack_replay->bCheckDone = false;
+		}
 	}
 
 	bool bDiscoveredL7;
@@ -1381,7 +1372,7 @@ static bool dp_rediscovery(struct play_state *ps)
 		bDiscoveredL7 = ps->l7proto != L7_UNKNOWN;
 	if (bDiscoveredL7) DLOG("discovered l7 protocol\n");
 
-	bool bDiscoveredHostname = ps->bHaveHost && !(ps->ctrack_replay && ps->ctrack_replay->hostname_discovered);
+	bool bDiscoveredHostname = *ps->host && !(ps->ctrack_replay && ps->ctrack_replay->hostname);
 	if (bDiscoveredHostname)
 	{
 		DLOG("discovered hostname\n");
@@ -1395,11 +1386,28 @@ static bool dp_rediscovery(struct play_state *ps)
 				DLOG_ERR("hostname dup : out of memory");
 				return false;
 			}
-			ps->ctrack_replay->hostname_discovered = true;
 			if (!ipcache_put_hostname(ps->sdip4, ps->sdip6, ps->host, bHostIsIp))
 				return false;
 		}
 	}
+	if (bDiscoveredL7 || bDiscoveredHostname)
+	{
+		struct desync_profile *dp_prev = ps->dp;
+		// search for desync profile again. it may have changed.
+		ps->dp = dp_find(&params.desync_profiles, ps->dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF,
+			ps->ctrack_replay ? ps->ctrack_replay->hostname : *ps->host ? ps->host : NULL,
+			ps->ctrack_replay ? ps->ctrack_replay->hostname_is_ip : bHostIsIp,
+			ps->l7proto, ps->ssid, ps->fwmark);
+		if (ps->ctrack_replay)
+			ps->ctrack_replay->dp = ps->dp;
+		if (!ps->dp) return false; // should never happen
+		if (ps->dp != dp_prev)
+		{
+			dp_changed(ps->ctrack_replay);
+			DLOG("desync profile changed by revealed l7 protocol or hostname !\n");
+		}
+	}
+
 	bool bCheckDone, bCheckResult, bCheckExcluded;
 	if (ps->ctrack_replay)
 	{
@@ -1409,34 +1417,8 @@ static bool dp_rediscovery(struct play_state *ps)
 	}
 	else
 		bCheckDone = bCheckResult = bCheckExcluded = false;
-	if (bDiscoveredL7 || bDiscoveredHostname)
-	{
-		struct desync_profile *dp_prev = ps->dp;
-		// search for desync profile again. it may have changed.
-		ps->dp = dp_find(&params.desync_profiles, ps->dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF,
-			ps->ctrack_replay ? ps->ctrack_replay->hostname : ps->bHaveHost ? ps->host : NULL,
-			ps->ctrack_replay ? ps->ctrack_replay->hostname_is_ip : bHostIsIp,
-			ps->l7proto, ps->ssid, ps->fwmark,
-			&bCheckDone);
-		// if bCheckDone=true it means hostlists matched, result=true, excluded=false
-		// in autohostlist profile check is not done
-		bCheckResult = bCheckDone;
-		bCheckExcluded = false;
-		if (ps->ctrack_replay)
-		{
-			ps->ctrack_replay->dp = ps->dp;
-			ps->ctrack_replay->dp_search_complete = true;
-			ps->ctrack_replay->bCheckResult = ps->ctrack_replay->bCheckDone = bCheckDone;
-			ps->ctrack_replay->bCheckExcluded = bCheckExcluded;
-		}
-		if (!ps->dp) return false;
-		if (ps->dp != dp_prev)
-		{
-			dp_changed(ps->ctrack_replay);
-			DLOG("desync profile changed by revealed l7 protocol or hostname !\n");
-		}
-	}
-	if ((ps->bHaveHost || ps->bCheckHost) && !PROFILE_HOSTLISTS_EMPTY(ps->dp))
+
+	if (*ps->host && ps->dp->hostlist_auto)
 	{
 		if (!bCheckDone)
 		{
@@ -1458,7 +1440,7 @@ static bool dp_rediscovery(struct play_state *ps)
 			}
 			else
 			{
-				ps->ctrack_replay->hostname_ah_check = ps->dp->hostlist_auto && !bCheckExcluded;
+				ps->ctrack_replay->hostname_ah_check = !bCheckExcluded;
 				if (ps->dis->proto==IPPROTO_TCP && !ps->ctrack_replay->hostname_ah_check)
 					ctrack_stop_retrans_counter(ps->ctrack_replay);
 			}
@@ -1553,7 +1535,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 							HOSTLIST_DEBUGLOG_APPEND("%s : profile %u (%s) : client %s : proto %s : rseq %u : redirect to another domain", ps.ctrack->hostname, ps.ctrack->dp->n, PROFILE_NAME(ps.dp), client_ip_port, l7proto_str(ps.l7proto), rseq);
 						}
 						else
-							DLOG("local or in-domain redirect detected. it's not a DPI redirect.\n");
+							DLOG("not a DPI redirect\n");
 					}
 					if (bFail)
 					{
@@ -1655,13 +1637,13 @@ static uint8_t dpi_desync_tcp_packet_play(
 					return VERDICT_DROP;
 				}
 			}
-			ps.bHaveHost = TLSHelloExtractHost(rdata_payload, rlen_payload, ps.host, sizeof(ps.host), true);
+			TLSHelloExtractHost(rdata_payload, rlen_payload, ps.host, sizeof(ps.host), true);
 		}
 		else
 		{
 			reasm_client_cancel(ps.ctrack);
 			if (ps.l7payload==L7P_HTTP_REQ)
-				ps.bHaveHost = HttpExtractHost(rdata_payload, rlen_payload, ps.host, sizeof(ps.host));
+				HttpExtractHost(rdata_payload, rlen_payload, ps.host, sizeof(ps.host));
 		}
 	}
 
@@ -1956,7 +1938,7 @@ static uint8_t dpi_desync_udp_packet_play(
 							{
 								data_decrypt = defrag + hello_offset;
 								len_decrypt = hello_len;
-								ps.bHaveHost = TLSHelloExtractHostFromHandshake(data_decrypt, len_decrypt, ps.host, sizeof(ps.host), true);
+								TLSHelloExtractHostFromHandshake(data_decrypt, len_decrypt, ps.host, sizeof(ps.host), true);
 							}
 						}
 						else
@@ -2071,7 +2053,7 @@ static uint8_t dpi_desync_icmp_packet(
 				// invert direction. they are answering to this packet
 				bReverse = !bReverse;
 				DLOG("found conntrack entry. inverted reverse=%u\n",bReverse);
-				if (ctrack->dp_search_complete && ctrack->dp)
+				if (ctrack->dp)
 				{
 					// RELATED icmp processed within base connection profile
 					dp = ctrack->dp;
@@ -2114,7 +2096,6 @@ static uint8_t dpi_desync_icmp_packet(
 			hostname = host;
 		}
 
-		bool bCheckDone;
 		dp = dp_find(
 			&params.desync_profiles,
 			dis->proto,
@@ -2122,13 +2103,13 @@ static uint8_t dpi_desync_icmp_packet(
 			dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL,
 			0, dis->icmp->icmp_type, dis->icmp->icmp_code,
 			hostname, hostname_is_ip,
-			L7_UNKNOWN, ssid, fwmark, &bCheckDone);
+			L7_UNKNOWN, ssid, fwmark);
 		if (!dp)
 		{
 			DLOG("matching desync profile not found\n");
 			return verdict;
 		}
-		if (hostname && !bCheckDone && !PROFILE_HOSTLISTS_EMPTY(dp))
+		if (hostname && dp->hostlist_auto)
 		{
 			// autohostlist case - no check done
 			if (!HostlistCheck(dp, hostname, hostname_is_ip, NULL, false))
@@ -2190,7 +2171,6 @@ static uint8_t dpi_desync_ip_packet(
 	{
 		hostname = host;
 	}
-	bool bCheckDone;
 	dp = dp_find(
 		&params.desync_profiles,
 		dis->proto,
@@ -2198,13 +2178,13 @@ static uint8_t dpi_desync_ip_packet(
 		dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL,
 		0, 0xFF, 0xFF,
 		hostname, hostname_is_ip,
-		L7_UNKNOWN, ssid, fwmark, &bCheckDone);
+		L7_UNKNOWN, ssid, fwmark);
 	if (!dp)
 	{
 		DLOG("matching desync profile not found\n");
 		return verdict;
 	}
-	if (hostname && !bCheckDone && !PROFILE_HOSTLISTS_EMPTY(dp))
+	if (hostname && dp->hostlist_auto)
 	{
 		// autohostlist case - no check done
 		if (!HostlistCheck(dp, hostname, hostname_is_ip, NULL, false))

@@ -62,7 +62,6 @@ typedef struct
 	t_ctrack_positions pos;
 
 	struct desync_profile *dp;		// desync profile cache
-	bool dp_search_complete;
 
 	uint8_t req_retrans_counter;		// number of request retransmissions
 	bool failure_detect_finalized;
@@ -76,7 +75,6 @@ typedef struct
 	bool l7proto_discovered;
 	char *hostname;
 	bool hostname_is_ip;
-	bool hostname_discovered;
 	bool hostname_ah_check;			// should perform autohostlist checks
 
 	int lua_state;				// registry index of associated LUA object

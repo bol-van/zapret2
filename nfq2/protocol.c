@@ -339,6 +339,8 @@ bool HttpExtractHeader(const uint8_t *data, size_t len, const char *header, char
 {
 	const uint8_t *p, *s, *e = data + len;
 
+	if (buf && len_buf) *buf=0;
+
 	p = (uint8_t*)strncasestr((char*)data, header, len);
 	if (!p) return false;
 	p += strlen(header);
@@ -688,6 +690,7 @@ bool TLSHelloExtractHost(const uint8_t *data, size_t len, char *host, size_t len
 	const uint8_t *ext;
 	size_t elen;
 
+	if (host && len_host) *host=0;
 	if (!TLSFindExt(data, len, 0, &ext, &elen, bPartialIsOK)) return false;
 	return TLSExtractHostFromExt(ext, elen, host, len_host);
 }
@@ -696,6 +699,7 @@ bool TLSHelloExtractHostFromHandshake(const uint8_t *data, size_t len, char *hos
 	const uint8_t *ext;
 	size_t elen;
 
+	if (host && len_host) *host=0;
 	if (!TLSFindExtInHandshake(data, len, 0, &ext, &elen, bPartialIsOK)) return false;
 	return TLSExtractHostFromExt(ext, elen, host, len_host);
 }
