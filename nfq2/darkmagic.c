@@ -582,7 +582,16 @@ void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis, bo
 
 		bool good = proto_skip_ipv6(&data, &len, &dis->proto, &dis->frag, &dis->frag_off);
 		dis->len_l3 = data-p;
-		if (!good) return; // nothing to analyze further - it's garbage
+		if (!good)
+		{
+			// nothing to analyze further - it's garbage
+			dis->ip6 = NULL;
+			dis->proto = 0;
+			dis->len_l3 = 0;
+			dis->frag = false;
+			dis->frag_off = 0;
+			return;
+		}
 	}
 	else
 	{
