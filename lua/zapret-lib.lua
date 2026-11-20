@@ -2597,9 +2597,9 @@ function tls_dissect(tls, offset, partialOK)
 		if typ==TLS_RECORD_TYPE_CHANGE_CIPHER_SPEC then
 			encrypted = true
 		elseif typ==TLS_RECORD_TYPE_HANDSHAKE and not encrypted and len>0 then
-			if (#tls-off+1)<len then
+			if (#tls-off+1)<(len+5) then
 				if not partialOK then return end
-				break
+				if (#tls-off+1)<6 then break end
 			end
 			local htyp = tls_handshake_type(tls, off + 5)
 			tdis.rec[#tdis.rec].htype = htyp
