@@ -2678,12 +2678,12 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 		else if (ip6)
 		{
 			// data points to reconstructed packet's end
-			uint8_t *frag = proto_find_ip6_exthdr(ip6, l, IPPROTO_FRAGMENT);
-			if (frag)
+			struct ip6_frag *frag = (struct ip6_frag*)proto_find_ip6_exthdr(ip6, l, IPPROTO_FRAGMENT);
+			if (frag && (frag->ip6f_offlg & (IP6F_OFF_MASK|IP6F_MORE_FRAG)))
 			{
 				uint16_t plen = ntohs(ip6->ip6_ctlun.ip6_un1.ip6_un1_plen); // without ipv6 base header
-				uint16_t off = ntohs(((struct ip6_frag *)frag)->ip6f_offlg) & 0xFFF8;
-				uint8_t *endfrag = frag + 8;
+				uint16_t off = ntohs(frag->ip6f_offlg & IP6F_OFF_MASK);
+				uint8_t *endfrag = (uint8_t*)(frag + 1);
 				size_t size_unfragmentable = endfrag - (uint8_t*)ip6 - sizeof(struct ip6_hdr);
 
 				if (size_unfragmentable > plen)
