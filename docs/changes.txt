@@ -368,3 +368,9 @@ v0.9.4.3
 * nfqws2: disable more syscalls
 * nfqws2: can_drop_root() now checks /proc/self/setgroups
 * install_bin: prefer ELF method to fix arch selection when qemu-user-static is installed
+* zapret-lib: support ipv6 literals in dissect_url
+* nfqws2: use port stripped hostname to discover DPI redirect
+* nfqws2: fix autohostlist behavior with ipcache-hostname
+* nfqws2: copy filter_mark and filter_ssid_neg in templates
+* nfqws2: recalculate L3 lengts for frag_off packets
+* zapret-auto: fix non-working stopif
