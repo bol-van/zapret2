@@ -363,11 +363,11 @@ bool HttpExtractHost(const uint8_t *data, size_t len, char *host, size_t len_hos
 	return HttpExtractHeader(data, len, "\nHost:", host, len_host);
 }
 // DPI redirects are global redirects to another domain
-bool HttpReplyLooksLikeDPIRedirect(const uint8_t *data, size_t len, const char *host)
+bool HttpReplyLooksLikeDPIRedirect(const uint8_t *data, size_t len, const char *host, bool host_is_ip)
 {
 	char loc[256],*redirect_host, *p;
 	int code;
-	
+
 	if (!host || !*host || !IsHttpReply(data, len)) return false;
 	
 	code = HttpReplyCode(data);
@@ -382,24 +382,36 @@ bool HttpReplyLooksLikeDPIRedirect(const uint8_t *data, size_t len, const char *
 		redirect_host=loc+8;
 	else
 		return false;
-		
-	// somethinkg like : censor.net/badpage.php?reason=denied&source=RKN
-	
+
+	// something like :
+	//   censor.net/badpage.php?reason=denied&source=RKN
+	//   1.2.3.4:8888/badpage.php?reason=denied&source=RKN
+	//   [2a05:88ad:3519::23:5]:8888/badpage.php?reason=denied&source=RKN
+
 	for(p=redirect_host; *p && *p!='/' && *p!='?' && *p!='#' ; p++);
 	*p=0;
 	if (!*redirect_host) return false;
 
-	// somethinkg like : censor.net
-	
-	// extract 2nd level domains
-	const char *dhost, *drhost;
-	if (!FindNLD((uint8_t*)redirect_host,strlen(redirect_host),2,(const uint8_t**)&drhost,NULL))
-		return false;
-	if (!FindNLD((uint8_t*)host,strlen(host),2,(const uint8_t**)&dhost,NULL))
-		return true; // no SLD redirects to SLD
+	bool bIsIP = strip_host_to_ip(redirect_host);
+	if (bIsIP!=host_is_ip) return true; // redirect from ip to domain or from domain to ip. not site local
 
-	// compare 2nd level domains		
-	return strcasecmp(dhost, drhost)!=0;
+	if (bIsIP)
+	{
+		// compare literal IP representation
+		return strcmp(redirect_host,host)!=0;
+	}
+	else
+	{
+		// extract 2nd level domains
+		const char *dhost, *drhost;
+		if (!FindNLD((uint8_t*)redirect_host,strlen(redirect_host),2,(const uint8_t**)&drhost,NULL))
+			return false;
+		if (!FindNLD((uint8_t*)host,strlen(host),2,(const uint8_t**)&dhost,NULL))
+			return true; // no SLD redirects to SLD
+
+		// compare 2nd level domains
+		return strcasecmp(dhost, drhost)!=0;
+	}
 }
 ssize_t HttpPos(t_marker posmarker, int16_t pos, const uint8_t *data, size_t sz)
 {

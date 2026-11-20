@@ -1546,7 +1546,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 					else if (dis->len_payload && ps.l7payload == L7P_HTTP_REPLY)
 					{
 						DLOG("incoming HTTP reply detected for hostname %s rseq %u\n", ps.ctrack->hostname, rseq);
-						bFail = HttpReplyLooksLikeDPIRedirect(dis->data_payload, dis->len_payload, ps.ctrack->hostname);
+						bFail = HttpReplyLooksLikeDPIRedirect(dis->data_payload, dis->len_payload, ps.ctrack->hostname, ps.ctrack->hostname_is_ip);
 						if (bFail)
 						{
 							DLOG("redirect to another domain detected. possibly DPI redirect.\n");
