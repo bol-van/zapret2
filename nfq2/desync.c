@@ -290,8 +290,7 @@ static bool dp_match(
 		{
 			if (match->bCheckDone) *match->bCheckDone = true;
 			bool b;
-			b = HostlistCheck(dp, match->hostname, match->bNoSubdom, match->bExcluded, true);
-			if (match->bCheckResult) *match->bCheckResult = b;
+			b = HostlistCheck(dp, match->hostname, match->bNoSubdom, NULL, true);
 			return b;
 		}
 	}
@@ -305,7 +304,7 @@ static struct desync_profile *dp_find(
 	uint16_t port, uint8_t icmp_type, uint8_t icmp_code,
 	const char *hostname, bool bNoSubdom, t_l7proto l7proto,
 	const char *ssid, uint32_t fwmark,
-	bool *bCheckDone, bool *bCheckResult, bool *bExcluded)
+	bool *bCheckDone)
 {
 	struct desync_profile_list *dpl;
 	struct dp_match_data match = {
@@ -314,7 +313,7 @@ static struct desync_profile *dp_find(
 		.port=port, .icmp_type=icmp_type, .icmp_code=icmp_code,
 		.hostname=hostname, .bNoSubdom=bNoSubdom, .l7proto=l7proto,
 		.ssid=ssid, .fwmark=fwmark,
-		.bCheckDone=bCheckDone, .bCheckResult=bCheckResult, .bExcluded=bExcluded
+		.bCheckDone=bCheckDone
 	};
 	if (params.debug)
 	{
@@ -1227,7 +1226,7 @@ struct play_state
 	t_l7payload l7payload;
 	const char *ssid;
 	uint32_t fwmark;
-	bool bReverse, bReverseFixed, bHaveHost;
+	bool bReverse, bReverseFixed, bHaveHost, bCheckHost;
 };
 static bool play_prolog(
 	struct play_state *ps,
@@ -1246,7 +1245,7 @@ static bool play_prolog(
 	ps->tpos = tpos;
 	ps->dp = NULL;
 	ps->ctrack = ps->ctrack_replay = NULL;
-	ps->bReverse = ps->bReverseFixed = ps->bHaveHost = false;
+	ps->bReverse = ps->bReverseFixed = ps->bHaveHost = ps->bCheckHost = false;
 	ps->l7proto = L7_UNKNOWN;
 	ps->l7payload = dis->len_payload ? L7P_UNKNOWN : L7P_EMPTY;
 	ps->ssid = NULL;
@@ -1274,7 +1273,7 @@ static bool play_prolog(
 			DLOG("using cached desync profile %u (%s)\n", ps->dp->n, PROFILE_NAME(ps->dp));
 		else if (!ps->ctrack_replay->dp_search_complete)
 		{
-			ps->dp = ps->ctrack_replay->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, ps->ctrack_replay->hostname, ps->ctrack_replay->hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark, NULL, NULL, NULL);
+			ps->dp = ps->ctrack_replay->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, ps->ctrack_replay->hostname, ps->ctrack_replay->hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark, NULL);
 			ps->ctrack_replay->dp_search_complete = true;
 		}
 		if (!ps->dp)
@@ -1320,13 +1319,16 @@ static bool play_prolog(
 					if (ipcache_get_hostname(ps->sdip4, ps->sdip6, ps->host, sizeof(ps->host), &hostname_is_ip))
 					{
 						if ((hostname = ps->ctrack->hostname = strdup(ps->host)))
+						{
 							ps->ctrack->hostname_is_ip = hostname_is_ip;
+							ps->bCheckHost = true;
+						}
 						else
 							DLOG_ERR("strdup(host): out of memory\n");
 					}
 				}
 			}
-			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, hostname, hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark, NULL, NULL, NULL);
+			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, hostname, hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark, NULL);
 			if (ps->ctrack)
 			{
 				ps->ctrack->dp = ps->dp;
@@ -1415,13 +1417,16 @@ static bool dp_rediscovery(struct play_state *ps)
 			ps->ctrack_replay ? ps->ctrack_replay->hostname : ps->bHaveHost ? ps->host : NULL,
 			ps->ctrack_replay ? ps->ctrack_replay->hostname_is_ip : bHostIsIp,
 			ps->l7proto, ps->ssid, ps->fwmark,
-			&bCheckDone, &bCheckResult, &bCheckExcluded);
+			&bCheckDone);
+		// if bCheckDone=true it means hostlists matched, result=true, excluded=false
+		// in autohostlist profile check is not done
+		bCheckResult = bCheckDone;
+		bCheckExcluded = false;
 		if (ps->ctrack_replay)
 		{
 			ps->ctrack_replay->dp = ps->dp;
 			ps->ctrack_replay->dp_search_complete = true;
-			ps->ctrack_replay->bCheckDone = bCheckDone;
-			ps->ctrack_replay->bCheckResult = bCheckResult;
+			ps->ctrack_replay->bCheckResult = ps->ctrack_replay->bCheckDone = bCheckDone;
 			ps->ctrack_replay->bCheckExcluded = bCheckExcluded;
 		}
 		if (!ps->dp) return false;
@@ -1431,7 +1436,7 @@ static bool dp_rediscovery(struct play_state *ps)
 			DLOG("desync profile changed by revealed l7 protocol or hostname !\n");
 		}
 	}
-	if (ps->bHaveHost && !PROFILE_HOSTLISTS_EMPTY(ps->dp))
+	if ((ps->bHaveHost || ps->bCheckHost) && !PROFILE_HOSTLISTS_EMPTY(ps->dp))
 	{
 		if (!bCheckDone)
 		{
@@ -2109,6 +2114,7 @@ static uint8_t dpi_desync_icmp_packet(
 			hostname = host;
 		}
 
+		bool bCheckDone;
 		dp = dp_find(
 			&params.desync_profiles,
 			dis->proto,
@@ -2116,11 +2122,20 @@ static uint8_t dpi_desync_icmp_packet(
 			dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL,
 			0, dis->icmp->icmp_type, dis->icmp->icmp_code,
 			hostname, hostname_is_ip,
-			L7_UNKNOWN, ssid, fwmark, NULL, NULL, NULL);
+			L7_UNKNOWN, ssid, fwmark, &bCheckDone);
 		if (!dp)
 		{
 			DLOG("matching desync profile not found\n");
 			return verdict;
+		}
+		if (hostname && !bCheckDone && !PROFILE_HOSTLISTS_EMPTY(dp))
+		{
+			// autohostlist case - no check done
+			if (!HostlistCheck(dp, hostname, hostname_is_ip, NULL, false))
+			{
+				DLOG("not applying tampering because of negative hostlist check\n");
+				return verdict;
+			}
 		}
 	}
 
@@ -2175,6 +2190,7 @@ static uint8_t dpi_desync_ip_packet(
 	{
 		hostname = host;
 	}
+	bool bCheckDone;
 	dp = dp_find(
 		&params.desync_profiles,
 		dis->proto,
@@ -2182,11 +2198,20 @@ static uint8_t dpi_desync_ip_packet(
 		dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL,
 		0, 0xFF, 0xFF,
 		hostname, hostname_is_ip,
-		L7_UNKNOWN, ssid, fwmark, NULL, NULL, NULL);
+		L7_UNKNOWN, ssid, fwmark, &bCheckDone);
 	if (!dp)
 	{
 		DLOG("matching desync profile not found\n");
 		return verdict;
+	}
+	if (hostname && !bCheckDone && !PROFILE_HOSTLISTS_EMPTY(dp))
+	{
+		// autohostlist case - no check done
+		if (!HostlistCheck(dp, hostname, hostname_is_ip, NULL, false))
+		{
+			DLOG("not applying tampering because of negative hostlist check\n");
+			return verdict;
+		}
 	}
 
 	bool bReverse = ifin && *ifin && (!ifout || !*ifout);
