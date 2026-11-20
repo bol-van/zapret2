@@ -1883,9 +1883,21 @@ function dissect_url(url)
 		domain = string.sub(url,p1)
 	end
 	if domain then
-		pstart,pend = string.find(domain,':',1,true)
-		if pend then
-			port = string.sub(domain, pend+1)
+		if string.sub(domain,1,1)=='[' then
+			-- ipv6 literal with possible port [2a05:3910::82:1]:581
+			pstart = string.find(domain,']',2,true)
+			if pstart then
+				if pstart<#domain and string.sub(domain,pstart+1,pstart+1)==':' then
+					pstart = pstart+1
+				else
+					pstart = nil
+				end
+			end
+		else
+			pstart = string.find(domain,':',1,true)
+		end
+		if pstart then
+			port = string.sub(domain, pstart+1)
 			domain = string.sub(domain, 1, pstart-1)
 		end
 	end
