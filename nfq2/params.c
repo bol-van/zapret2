@@ -511,12 +511,13 @@ bool dp_list_have_autohostlist(struct desync_profile_list_head *head)
 	return false;
 }
 
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
 void cleanup_args(struct params_s *params)
 {
-	wordfree(&params->wexp);
+	free(params->config_argv);
+	free(params->config_buf);
+	params->config_argv = NULL;
+	params->config_buf = NULL;
 }
-#endif
 
 #ifdef __CYGWIN__
 void cleanup_windivert_portfilters(struct params_s *params)
@@ -558,9 +559,7 @@ void cleanup_params(struct params_s *params)
 {
 	lua_shutdown();
 
-#if !defined( __OpenBSD__) && !defined(__ANDROID__)
 	cleanup_args(params);
-#endif
 
 	ConntrackPoolDestroy(&params->conntrack);
 	dp_list_destroy(&params->desync_profiles);
