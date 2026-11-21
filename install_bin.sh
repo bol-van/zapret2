@@ -161,7 +161,7 @@ case $UNAME in
 		ARCHLIST="my linux-x86_64 linux-x86 linux-arm64 linux-arm linux-mips64 linux-mipsel64 linux-mipsel linux-mips linux-lexra linux-ppc linux-riscv64"
 		PKTWS=nfqws2
 		;;
-	FreeBSD)
+	FreeBSD|OpenBSD)
 		ARCHLIST="my freebsd-x86_64"
 		PKTWS=dvtws2
 		;;
