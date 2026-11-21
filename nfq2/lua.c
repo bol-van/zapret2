@@ -2472,7 +2472,24 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 		frag = false;
 	lua_pop(L, 1);
 
-	if (frag) ip6_preserve_next = true; // there's no other source of next. no tcp, no udp, no icmp headers. just raw ip payload
+	if (!ip6_preserve_next)
+	{
+		if (frag)
+			ip6_preserve_next = true; // there's no other source of next. no tcp, no udp, no icmp headers. just raw ip payload
+		else
+		{
+			bool b;
+			const char * const * tbl, * const tbls[] = {"tcp","udp","icmp",NULL};
+			for (b=false,tbl=tbls;*tbl && !b;tbl++)
+			{
+				lua_getfield(L,idx,*tbl);
+				b = lua_type(L,-1)==LUA_TTABLE;
+				lua_pop(L, 1);
+			}
+			// force ip6_preserve_next if no known L4 headers exist
+			ip6_preserve_next = !b;
+		}
+	}
 
 	lua_getfield(L,idx,"ip");
 	l = left;
