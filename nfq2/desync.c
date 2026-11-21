@@ -1264,11 +1264,7 @@ static bool play_prolog(
 		else
 		{
 			ps->dp = ps->ctrack_replay->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, ps->ctrack_replay->hostname, ps->ctrack_replay->hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark);
-			if (!ps->dp)
-			{
-				DLOG("matching desync profile not found\n");
-				return false;
-			}
+			if (!ps->dp) return false; // should never happen
 		}
 	}
 	else
@@ -1295,7 +1291,7 @@ static bool play_prolog(
 		if (ps->ctrack) ps->l7proto = ps->ctrack->l7proto;
 		if (ps->dp)
 			DLOG("using cached desync profile %u (%s)\n", ps->dp->n, PROFILE_NAME(ps->dp));
-		else if (!ps->ctrack || !ps->ctrack->dp)
+		else
 		{
 			const char *hostname = NULL;
 			bool hostname_is_ip = false;
@@ -1317,11 +1313,7 @@ static bool play_prolog(
 			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, hostname, hostname_is_ip, ps->l7proto, ps->ssid, ps->fwmark);
 			if (ps->ctrack)	ps->ctrack->dp = ps->dp;
 		}
-		if (!ps->dp)
-		{
-			DLOG("matching desync profile not found\n");
-			return false;
-		}
+		if (!ps->dp) return false; // should never happen
 
 		HostFailPoolPurgeRateLimited(&ps->dp->hostlist_auto_fail_counters, &ps->dp->hostlist_auto_last_purge);
 		//ConntrackPoolDump(&params.conntrack);
@@ -1422,6 +1414,7 @@ static bool dp_rediscovery(struct play_state *ps)
 	{
 		if (!bCheckDone)
 		{
+			DLOG("autohostlist caused list check\n");
 			bCheckResult = HostlistCheck(ps->dp, ps->host, bHostIsIp, &bCheckExcluded, false);
 			bCheckDone = true;
 			if (ps->ctrack_replay)
@@ -2080,22 +2073,23 @@ static uint8_t dpi_desync_icmp_packet(
 			DLOG("found ssid for %s : %s\n", ifname, ssid);
 	}
 #endif
+
+	bool hostname_is_ip = false;
+	char host[256];
+	const char *hostname = NULL;
+	if (ctrack && ctrack->hostname)
+	{
+		hostname = ctrack->hostname;
+		hostname_is_ip = ctrack->hostname_is_ip;
+	}
+	else if (ipcache_get_hostname(dis->ip ? &dis->ip->ip_dst : NULL, dis->ip6 ? &dis->ip6->ip6_dst : NULL, host, sizeof(host), &hostname_is_ip) ||
+		ipcache_get_hostname(dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL, host, sizeof(host), &hostname_is_ip))
+	{
+		hostname = host;
+	}
+
 	if (!dp)
 	{
-		bool hostname_is_ip = false;
-		char host[256];
-		const char *hostname = NULL;
-		if (ctrack && ctrack->hostname)
-		{
-			hostname = ctrack->hostname;
-			hostname_is_ip = ctrack->hostname_is_ip;
-		}
-		else if (ipcache_get_hostname(dis->ip ? &dis->ip->ip_dst : NULL, dis->ip6 ? &dis->ip6->ip6_dst : NULL, host, sizeof(host), &hostname_is_ip) ||
-			ipcache_get_hostname(dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL, host, sizeof(host), &hostname_is_ip))
-		{
-			hostname = host;
-		}
-
 		dp = dp_find(
 			&params.desync_profiles,
 			dis->proto,
@@ -2104,19 +2098,21 @@ static uint8_t dpi_desync_icmp_packet(
 			0, dis->icmp->icmp_type, dis->icmp->icmp_code,
 			hostname, hostname_is_ip,
 			L7_UNKNOWN, ssid, fwmark);
-		if (!dp)
+		if (!dp) return verdict; // should never happen
+	}
+	if (hostname && dp->hostlist_auto)
+	{
+		if (ctrack && ctrack->bCheckDone)
 		{
-			DLOG("matching desync profile not found\n");
-			return verdict;
+			if (!ctrack->bCheckResult)
+				goto negcheck;
 		}
-		if (hostname && dp->hostlist_auto)
+		else
 		{
+			DLOG("autohostlist caused list check\n");
 			// autohostlist case - no check done
 			if (!HostlistCheck(dp, hostname, hostname_is_ip, NULL, false))
-			{
-				DLOG("not applying tampering because of negative hostlist check\n");
-				return verdict;
-			}
+				goto negcheck;
 		}
 	}
 
@@ -2129,6 +2125,10 @@ static uint8_t dpi_desync_icmp_packet(
 		dp, fwmark, ifin, ifout, bReverseFixed, ctrack, NULL, l7payload, ctrack ? ctrack->l7proto : L7_UNKNOWN,
 		dis, sdip4, sdip6, 0, mod_pkt, len_mod_pkt, 0, 0, 0, NULL, 0, NULL, 0);
 
+	return verdict;
+
+negcheck:
+	DLOG("not applying tampering because of negative hostlist check\n");
 	return verdict;
 }
 
@@ -2179,13 +2179,10 @@ static uint8_t dpi_desync_ip_packet(
 		0, 0xFF, 0xFF,
 		hostname, hostname_is_ip,
 		L7_UNKNOWN, ssid, fwmark);
-	if (!dp)
-	{
-		DLOG("matching desync profile not found\n");
-		return verdict;
-	}
+	if (!dp) return verdict; // should never happen
 	if (hostname && dp->hostlist_auto)
 	{
+		DLOG("autohostlist caused list check\n");
 		// autohostlist case - no check done
 		if (!HostlistCheck(dp, hostname, hostname_is_ip, NULL, false))
 		{

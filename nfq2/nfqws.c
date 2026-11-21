@@ -3241,10 +3241,18 @@ fmark_err:
 	{
 		dp = &dpl->dp;
 
-		if (params.server && dp->hostlist_auto)
+		if (dp->hostlist_auto)
 		{
-			DLOG_ERR("autohostlists not supported in server mode\n");
-			exit_clean(1);
+			if (params.server)
+			{
+				DLOG_ERR("autohostlists not supported in server mode\n");
+				exit_clean(1);
+			}
+			if (params.ctrack_disable)
+			{
+				DLOG_ERR("autohostlists not supported without conntrack\n");
+				exit_clean(1);
+			}
 		}
 
 #ifndef __CYGWIN__
