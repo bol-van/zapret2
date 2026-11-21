@@ -29,7 +29,7 @@ int unique_ssize_t(ssize_t *pu, int ct);
 void qsort_size_t(size_t *array, int ct);
 void qsort_ssize_t(ssize_t *array, int ct);
 
-int str_index(const char **strs, int count, const char *str);
+int str_index(const char * const * strs, int count, const char *str);
 void rtrim(char *s);
 void replace_char(char *s, char from, char to);
 const char *strncasestr(const char *s,const char *find, size_t slen);

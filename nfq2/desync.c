@@ -26,7 +26,7 @@ typedef	struct
 	bool l7match;
 } t_protocol_probe;
 
-static void protocol_probe(t_protocol_probe *probe, int probe_count, const uint8_t *data_payload, size_t len_payload, t_ctrack *ctrack, t_l7proto *l7proto, t_l7payload *l7payload)
+static void protocol_probe(const t_protocol_probe *probe, int probe_count, const uint8_t *data_payload, size_t len_payload, t_ctrack *ctrack, t_l7proto *l7proto, t_l7payload *l7payload)
 {
 	for (int i = 0; i < probe_count; i++)
 	{
@@ -1484,7 +1484,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 		// protocol detection
 		if (!(dis->tcp->th_flags & TH_SYN) && dis->len_payload)
 		{
-			t_protocol_probe testers[] = {
+			const t_protocol_probe testers[] = {
 				{L7P_TLS_SERVER_HELLO,L7_TLS,IsTLSServerHelloPartial,false},
 				{L7P_HTTP_REPLY,L7_HTTP,IsHttpReply,false},
 				{L7P_XMPP_STREAM,L7_XMPP,IsXMPPStream,false},
@@ -1569,7 +1569,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 		// do not detect payload if reasm is in progress
 		if (!ps.ctrack_replay || ReasmIsEmpty(&ps.ctrack_replay->reasm_client))
 		{
-			t_protocol_probe testers[] = {
+			const t_protocol_probe testers[] = {
 				{L7P_TLS_CLIENT_HELLO,L7_TLS,IsTLSClientHelloPartial,false},
 				{L7P_HTTP_REQ,L7_HTTP,IsHttp,false},
 				{L7P_XMPP_STREAM,L7_XMPP,IsXMPPStream,false},
@@ -1583,7 +1583,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 				// this is special type. detection requires AES and can be successful only for the first data packet. no reason to AES every packet
 				if (ps.tpos && (ps.tpos->client.seq_last - ps.tpos->client.seq0)==1)
 				{
-					t_protocol_probe testers[] = {
+					const t_protocol_probe testers[] = {
 						{L7P_MTPROTO_INITIAL,L7_MTPROTO,IsMTProto,false}
 					};
 					protocol_probe(testers, sizeof(testers) / sizeof(*testers), rdata_payload, rlen_payload, ps.ctrack_replay, &ps.l7proto, &ps.l7payload);
@@ -1670,7 +1670,7 @@ static void quic_reasm_cancel(t_ctrack *ctrack, const char *reason)
 
 static void udp_standard_protocol_probe(const uint8_t *data_payload, size_t len_payload, t_ctrack *ctrack, t_l7proto *l7proto, t_l7payload *l7payload)
 {
-	t_protocol_probe testers[] = {
+	const t_protocol_probe testers[] = {
 		{L7P_QUIC_INITIAL,L7_QUIC,IsQUICInitial,false},
 		{L7P_DISCORD_IP_DISCOVERY,L7_DISCORD,IsDiscordIpDiscoveryRequest,false},
 		{L7P_STUN,L7_STUN,IsStunMessage,false},

@@ -16,7 +16,7 @@ static void ut_oom_recover(void *elem)
 	oom = true;
 }
 
-static const char *connstate_s[] = { "SYN","ESTABLISHED","FIN" };
+static const char * const connstate_s[] = { "SYN","ESTABLISHED","FIN" };
 
 static void connswap(const t_conn *c, t_conn *c2)
 {

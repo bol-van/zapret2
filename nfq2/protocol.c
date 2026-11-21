@@ -32,7 +32,7 @@ static bool FindNLD(const uint8_t *dom, size_t dlen, int level, const uint8_t **
 	return true;
 }
 
-static const char *l7proto_name[] = {
+static const char * const l7proto_name[] = {
 "all","unknown","known","http","tls","dtls","quic","wireguard","dht","discord","stun","xmpp","dns","mtproto","bt","utp_bt"
 };
 const char *l7proto_str(t_l7proto l7)
@@ -50,7 +50,7 @@ bool l7_proto_match(t_l7proto l7proto, uint64_t filter_l7)
 	return (filter_l7==L7_ALL) || (filter_l7 & (1ULL<<l7proto)) || (filter_l7 & (1ULL<<L7_KNOWN)) && (l7proto>L7_KNOWN) && (l7proto<L7_LAST);
 }
 
-static const char *l7payload_name[] = {
+static const char * const l7payload_name[] = {
  "all","unknown","empty","known",
  "ipv4","ipv6","icmp",
  "http_req","http_reply",
@@ -109,7 +109,7 @@ bool l7_payload_str_list(uint64_t l7p, char *buf, size_t size)
 }
 
 
-static const char *posmarker_names[] = {"abs","host","endhost","sld","midsld","endsld","method","extlen","sniext"};
+static const char * const posmarker_names[] = {"abs","host","endhost","sld","midsld","endsld","method","extlen","sniext"};
 const char *posmarker_name(t_marker posmarker)
 {
 	if (posmarker>=PM_LAST) return NULL;
@@ -248,10 +248,10 @@ void ResolveMultiPos(const uint8_t *data, size_t sz, t_l7payload l7payload, cons
 }
 
 
-static const char *http_methods[] = { "GET ","POST ","HEAD ","OPTIONS ","PUT ","DELETE ","CONNECT ","TRACE ", "PATCH ", NULL };
+static const char * const http_methods[] = { "GET ","POST ","HEAD ","OPTIONS ","PUT ","DELETE ","CONNECT ","TRACE ", "PATCH ", NULL };
 static const char *HttpMethod(const uint8_t *data, size_t len)
 {
-	const char **method;
+	const char * const *method;
 	size_t method_len;
 
 	if (len>=4)
