@@ -2098,6 +2098,7 @@ static uint8_t dpi_desync_icmp_packet(
 			0, dis->icmp->icmp_type, dis->icmp->icmp_code,
 			hostname, hostname_is_ip,
 			L7_UNKNOWN, ssid, fwmark);
+		if (ctrack) ctrack->dp = dp;
 		if (!dp) return verdict; // should never happen
 	}
 	if (hostname && dp->hostlist_auto)
