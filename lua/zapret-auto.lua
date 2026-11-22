@@ -108,9 +108,16 @@ end
 function is_dpi_redirect(hostname, location)
 	local ds = dissect_url(location)
 	if ds and ds.domain then
+		-- strip brackets
+		local h1 = string.match(hostname, "^%[(.*)%]$") or hostname
+		local h2 = string.match(ds.domain, "^%[(.*)%]$") or ds.domain
+		local ip1, ip2 = pton(h1), pton(h2)
+		if ip1 or ip2 then
+			return ip1 ~= ip2
+		end
 		local sld1 = dissect_nld(hostname,2)
 		local sld2 = dissect_nld(ds.domain,2)
-		return sld1 and sld2 and string.lower(sld1)~=string.lower(sld2) or (not sld1 or not sld2) and string.lower(hostname)~=string.lower(ds.domain)
+		return sld1 and sld2 and string.lower(sld1)~=string.lower(sld2) or (not sld1 or not sld2) and string.lower(h1)~=string.lower(h2)
 	end
 	return false
 end
