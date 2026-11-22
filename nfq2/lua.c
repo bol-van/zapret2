@@ -2472,11 +2472,11 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 		frag = false;
 	lua_pop(L, 1);
 
-	if (!ip6_preserve_next && last_proto==IPPROTO_NONE)
+	if (!ip6_preserve_next)
 	{
 		if (frag)
 			ip6_preserve_next = true; // there's no other source of next. no tcp, no udp, no icmp headers. just raw ip payload
-		else
+		else if (last_proto==IPPROTO_NONE)
 		{
 			bool b;
 			const char * const * tbl, * const tbls[] = {"tcp","udp","icmp",NULL};
