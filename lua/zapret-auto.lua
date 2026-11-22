@@ -115,8 +115,8 @@ function is_dpi_redirect(hostname, location)
 		if ip1 or ip2 then
 			return ip1 ~= ip2
 		end
-		local sld1 = dissect_nld(hostname,2)
-		local sld2 = dissect_nld(ds.domain,2)
+		local sld1 = dissect_nld(h1,2)
+		local sld2 = dissect_nld(h2,2)
 		return sld1 and sld2 and string.lower(sld1)~=string.lower(sld2) or (not sld1 or not sld2) and string.lower(h1)~=string.lower(h2)
 	end
 	return false
