@@ -374,5 +374,6 @@ v0.9.4.3
 * nfqws2: recalculate L3 lengts for frag_off packets
 * nfqws2: fix checksum edge cases
 * nfqws2: do not allow zero udp checksum
+* nfqws2: warn if not last profile is empty
 * zapret-auto: fix non-working stopif
 * zapret-lib: support ipv6 literals in dissect_url
