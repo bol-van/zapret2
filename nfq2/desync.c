@@ -1195,6 +1195,7 @@ static void dp_changed(t_ctrack *ctrack)
 			DLOG("clearing lua out cutoff because of profile change\n");
 			ctrack->b_lua_out_cutoff = false;
 		}
+		ctrack->bCheckDone = ctrack->hostname_ah_check = false;
 	}
 }
 
@@ -1338,6 +1339,7 @@ static bool play_prolog(
 static bool dp_rediscovery(struct play_state *ps)
 {
 	bool bHostIsIp = false;
+	char *host = NULL;
 
 	if (*ps->host)
 	{
@@ -1350,8 +1352,14 @@ static bool dp_rediscovery(struct play_state *ps)
 			// force rediscover
 			free(ps->ctrack_replay->hostname);
 			ps->ctrack_replay->hostname = NULL;
-			ps->ctrack_replay->bCheckDone = false;
+			ps->ctrack_replay->bCheckDone = ps->ctrack_replay->hostname_ah_check = false;
 		}
+		host = ps->host;
+	}
+	else if (ps->ctrack_replay)
+	{
+		host = ps->ctrack_replay->hostname;
+		bHostIsIp = ps->ctrack_replay->hostname_is_ip;
 	}
 
 	bool bDiscoveredL7;
@@ -1387,9 +1395,7 @@ static bool dp_rediscovery(struct play_state *ps)
 		struct desync_profile *dp_prev = ps->dp;
 		// search for desync profile again. it may have changed.
 		ps->dp = dp_find(&params.desync_profiles, ps->dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF,
-			ps->ctrack_replay ? ps->ctrack_replay->hostname : *ps->host ? ps->host : NULL,
-			ps->ctrack_replay ? ps->ctrack_replay->hostname_is_ip : bHostIsIp,
-			ps->l7proto, ps->ssid, ps->fwmark);
+			host, bHostIsIp, ps->l7proto, ps->ssid, ps->fwmark);
 		if (ps->ctrack_replay)
 			ps->ctrack_replay->dp = ps->dp;
 		if (!ps->dp) return false; // should never happen
@@ -1410,12 +1416,12 @@ static bool dp_rediscovery(struct play_state *ps)
 	else
 		bCheckDone = bCheckResult = bCheckExcluded = false;
 
-	if (*ps->host && ps->dp->hostlist_auto)
+	if (host && ps->dp->hostlist_auto)
 	{
 		if (!bCheckDone)
 		{
 			DLOG("autohostlist caused list check\n");
-			bCheckResult = HostlistCheck(ps->dp, ps->host, bHostIsIp, &bCheckExcluded, false);
+			bCheckResult = HostlistCheck(ps->dp, host, bHostIsIp, &bCheckExcluded, false);
 			bCheckDone = true;
 			if (ps->ctrack_replay)
 			{
