@@ -125,6 +125,7 @@ struct desync_profile_list *dp_list_search_name(struct desync_profile_list_head 
 void dp_entry_destroy(struct desync_profile_list *entry);
 void dp_list_destroy(struct desync_profile_list_head *head);
 bool dp_list_have_autohostlist(struct desync_profile_list_head *head);
+bool dp_empty(const struct desync_profile *dp);
 void dp_init(struct desync_profile *dp);
 bool dp_fake_defaults(struct desync_profile *dp);
 void dp_clear(struct desync_profile *dp);

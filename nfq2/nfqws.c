@@ -3375,6 +3375,19 @@ fmark_err:
 	}
 #endif
 
+	bool bWarnEmpty = false;
+	LIST_FOREACH(dpl, &params.desync_profiles, next)
+	{
+		dp = &dpl->dp;
+		// profile 0 and last profile can be empty with no impact
+		if (dp->n && dp->n<desync_profile_count && dp_empty(dp))
+		{
+			bWarnEmpty = true;
+			DLOG_CONDUP("WARNING ! Profile %u (%s) is empty. Everything after this profile is unreachable.\n",dp->n,PROFILE_NAME(dp));
+		}
+	}
+	if (bWarnEmpty) DLOG("\n");
+
 	if (bDry)
 	{
 #ifndef __CYGWIN__
