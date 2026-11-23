@@ -16,7 +16,7 @@ LDFLAGS="-lgcc_eh $LDFLAGS"
 # PIE does not work for arm32 and all mips
 PIE=${PIE:-0}
 HOSTCC=${HOSTCC:-cc}
-ZLIB_VER=${ZLIB_VER:-1.3.2}
+ZLIB_VER=${ZLIB_VER:-1.4}
 ZLIB_NG_VER=${ZLIB_NG_VER:-2.3.3}
 LUA_VER=${LUA_VER:-5.5}
 LUA_RELEASE=${LUA_RELEASE:-5.5.1}
