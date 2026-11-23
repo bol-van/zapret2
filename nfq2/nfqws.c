@@ -3386,7 +3386,7 @@ fmark_err:
 			DLOG_CONDUP("WARNING ! Profile %u (%s) is empty. Everything after this profile is unreachable.\n",dp->n,PROFILE_NAME(dp));
 		}
 	}
-	if (bWarnEmpty) DLOG("\n");
+	if (bWarnEmpty) DLOG_CONDUP("\n");
 
 	if (bDry)
 	{
