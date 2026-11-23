@@ -344,8 +344,7 @@ void dp_init_dynamic(struct desync_profile *dp)
 	LIST_INIT(&dp->filter_ssid);
 #endif
 }
-// no filters, no desync ?
-bool dp_empty(const struct desync_profile *dp)
+bool dp_empty_filter(const struct desync_profile *dp)
 {
 	return
 		!dp->b_filter_l3 && !dp->b_filter_l7 &&
@@ -360,8 +359,7 @@ bool dp_empty(const struct desync_profile *dp)
 		LIST_EMPTY(&dp->icf) &&
 		LIST_EMPTY(&dp->ipf) &&
 		PROFILE_HOSTLISTS_EMPTY(dp) &&
-		PROFILE_IPSETS_EMPTY(dp) &&
-		LIST_EMPTY(&dp->lua_desync);
+		PROFILE_IPSETS_EMPTY(dp);
 }
 void dp_init(struct desync_profile *dp)
 {
