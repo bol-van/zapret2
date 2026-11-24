@@ -33,7 +33,7 @@ win: $(SRC_FILES)
 	$(CC) -s $(CFLAGS) $(CFLAGS_WIN) -o ip2net.exe $(SRC_FILES) $(LIBS_WIN) $(LDFLAGS)
 
 win-arm64-cross:
-	clang -s $(CFLAGS) $(CFLAGS_WIN) --sysroot=/clangarm64 --target=aarch64-w64-mingw32 -B/clang64/bin -rtlib=compiler-rt -o mdig.exe $(SRC_FILES) $(LIBS_WIN) $(LDFLAGS)
+	clang -s $(CFLAGS) $(CFLAGS_WIN) --sysroot=/clangarm64 --target=aarch64-w64-mingw32 -B/clang64/bin -rtlib=compiler-rt -o ip2net.exe $(SRC_FILES) $(LIBS_WIN) $(LDFLAGS)
 
 clean:
 	rm -f ip2net *.o
