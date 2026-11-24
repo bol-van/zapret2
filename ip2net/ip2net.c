@@ -477,12 +477,12 @@ int main(int argc, char **argv)
 				mask = mask_from_bitcount(zct);
 				ip_start = iplist[pos] & mask;
 				subnet_ct = ~mask + 1;
-				if (iplist[pos] > (ip_start + subnet_ct*(params.pctdiv - params.pctmult) / params.pctdiv))
+				if (iplist[pos] > (ip_start + (uint64_t)subnet_ct*(params.pctdiv - params.pctmult) / params.pctdiv))
 					continue; // ip is higher than (1-PCT). definitely coverage is not enough. skip searching
 				ip_end = ip_start | ~mask;
 				for (p=pos+1, ip_ct=1; p < ipct && iplist[p] <= ip_end; p++) ip_ct++; // count ips within subnet range
 				if (ip_ct == 1) break;
-				if (ip_ct >= (subnet_ct*params.pctmult / params.pctdiv))
+				if (ip_ct >= ((uint64_t)subnet_ct*params.pctmult / params.pctdiv))
 				{
 					// network found. but is there smaller network with the same ip_ct ? dont do carpet bombing if possible, use smaller subnets
 					if (!ip_ct_best || ip_ct == ip_ct_best)

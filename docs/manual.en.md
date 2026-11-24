@@ -4712,8 +4712,7 @@ If `prefix_length=56-64` is used, the result will be:
 
 The CPU time required for calculations depends heavily on the width of the prefix length range, the size of the target subnets, and the length of the list.
 If `ip2net` takes too long, avoid using excessively large subnets and narrow the prefix length range.
-Note that `mul/div` arithmetic uses integers. If the 32-bit integer limit is exceeded, the results are unpredictable.
-Avoid using values like `5000000/10000000`; `1/2` is much more efficient.
+The calculations for `mul/div` use integer division. Equivalent fractions such as `1/2` and `5000000/10000000` give the same result.
 
 ## mdig
 
