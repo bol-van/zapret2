@@ -425,7 +425,7 @@ function rst(ctx, desync)
 		return
 	end
 	direction_cutoff_opposite(ctx, desync)
-	if direction_check(desync, "any") and payload_check(desync) then
+	if direction_check(desync) and payload_check(desync) then
 		if replay_first(desync) then
 			local dis = deepcopy(desync.dis)
 			dis.payload = ""

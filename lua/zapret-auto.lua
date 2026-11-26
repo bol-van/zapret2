@@ -108,9 +108,16 @@ end
 function is_dpi_redirect(hostname, location)
 	local ds = dissect_url(location)
 	if ds and ds.domain then
-		local sld1 = dissect_nld(hostname,2)
-		local sld2 = dissect_nld(ds.domain,2)
-		return sld2 and sld1~=sld2 and true or false
+		-- strip brackets
+		local h1 = string.match(hostname, "^%[(.*)%]$") or hostname
+		local h2 = string.match(ds.domain, "^%[(.*)%]$") or ds.domain
+		local ip1, ip2 = pton(h1), pton(h2)
+		if ip1 or ip2 then
+			return ip1 ~= ip2
+		end
+		local sld1 = dissect_nld(h1,2)
+		local sld2 = dissect_nld(h2,2)
+		return sld1 and sld2 and string.lower(sld1)~=string.lower(sld2) or (not sld1 or not sld2) and string.lower(h1)~=string.lower(h2)
 	end
 	return false
 end
@@ -504,8 +511,8 @@ end
 -- test case : --in-range=-s1 --lua-desync=circular --lua-desync=stopif:iff=cond_random:strategy=1 --lua-desync=argdebug:strategy=1 --lua-desync=argdebug:strategy=2
 function stopif(ctx, desync)
 	require_iff(desync, "stopif")
-	orchestrate(ctx, desync)
 	if logical_xor(_G[desync.arg.iff](desync), desync.arg.neg) then
+		orchestrate(ctx, desync)
 		DLOG("stopif: true")
 		plan_clear(desync)
 	else
@@ -547,6 +554,7 @@ function repeater(ctx, desync)
 	end
 	-- save plan copy
 	local plancopy = deepcopy(desync.plan)
+	local repeater_instance = get_desync_instance_id(desync)
 	for r=1,repeats do
 		if not logical_xor(_G[iff](desync), neg) then
 			DLOG("repeater: break by iff")
@@ -561,6 +569,9 @@ function repeater(ctx, desync)
 		until #desync.plan <= ct_end
 		-- rollback desync plan
 		desync.plan = deepcopy(plancopy)
+		-- roolback instance id and args
+		apply_execution_plan(desync, repeater_instance)
+		-- save any other changes in desync. they can be used by iff function
 	end
 	-- remove repeated instances from desync plan
 	for i=1,instances do

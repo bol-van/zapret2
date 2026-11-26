@@ -16,7 +16,7 @@ static void ut_oom_recover(void *elem)
 	oom = true;
 }
 
-static const char *connstate_s[] = { "SYN","ESTABLISHED","FIN" };
+static const char * const connstate_s[] = { "SYN","ESTABLISHED","FIN" };
 
 static void connswap(const t_conn *c, t_conn *c2)
 {
@@ -173,20 +173,6 @@ static void ConntrackApplyPos(t_ctrack *t, bool bReverse, const struct dissect *
 
 static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct dissect *dis)
 {
-	if (bReverse)
-	{
-		t->pos.server.pcounter++;
-		t->pos.server.pdcounter += !!dis->len_payload;
-		t->pos.server.pbcounter += dis->len_payload;
-	}
-
-	else
-	{
-		t->pos.client.pcounter++;
-		t->pos.client.pdcounter += !!dis->len_payload;
-		t->pos.client.pbcounter += dis->len_payload;
-	}
-
 	if (dis->tcp)
 	{
 		if (tcp_syn_segment(dis->tcp))
@@ -217,6 +203,19 @@ static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct dissect
 		}
 
 		ConntrackApplyPos(t, bReverse, dis);
+	}
+
+	if (bReverse)
+	{
+		t->pos.server.pcounter++;
+		t->pos.server.pdcounter += !!dis->len_payload;
+		t->pos.server.pbcounter += dis->len_payload;
+	}
+	else
+	{
+		t->pos.client.pcounter++;
+		t->pos.client.pdcounter += !!dis->len_payload;
+		t->pos.client.pbcounter += dis->len_payload;
 	}
 
 	clock_gettime(CLOCK_BOOT_OR_UPTIME, &t->pos.t_last);

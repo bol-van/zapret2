@@ -101,6 +101,12 @@ struct desync_profile
 	bool b_hostlist_auto_retrans_maxseq, b_hostlist_auto_incoming_maxseq, b_hostlist_auto_retrans_reset;
 	bool b_hostlist_auto_udp_out, b_hostlist_auto_udp_in;
 	bool b_filter_l3, b_filter_l7;
+#ifdef HAS_FILTER_SSID
+	bool b_filter_ssid_neg;
+#endif
+#ifdef __linux__
+	bool b_filter_mark;
+#endif
 };
 #define PROFILE_NAME(dp) ((dp)->name ? (dp)->name : "noname")
 
@@ -120,6 +126,7 @@ struct desync_profile_list *dp_list_search_name(struct desync_profile_list_head 
 void dp_entry_destroy(struct desync_profile_list *entry);
 void dp_list_destroy(struct desync_profile_list_head *head);
 bool dp_list_have_autohostlist(struct desync_profile_list_head *head);
+bool dp_empty_filter(const struct desync_profile *dp);
 void dp_init(struct desync_profile *dp);
 bool dp_fake_defaults(struct desync_profile *dp);
 void dp_clear(struct desync_profile *dp);
@@ -143,7 +150,7 @@ struct params_s
 	unsigned int fuzz;
 
 #ifdef __linux__
-	int qnum;
+	unsigned int qnum;
 #elif defined(BSD)
 	uint16_t port; // divert port
 #endif
@@ -207,6 +214,7 @@ struct params_s
 
 	uint64_t lua_gc;
 	int ref_desync_ctx; // desync ctx userdata registry ref
+	struct s_lua_desync_context *desync_ctx_singleton;
 	lua_State *L;
 };
 

@@ -8,30 +8,26 @@ BINDIR="$EXEDIR/$BINS"
 ZAPRET_BASE=${ZAPRET_BASE:-"$EXEDIR"}
 . "$ZAPRET_BASE/common/base.sh"
 
-
 read_elf_arch()
 {
 	# $1 - elf file
 
 	local arch=$(dd if="$1" count=2 bs=1 skip=18 2>/dev/null | hexdump -e '2/1 "%02x"')
-	local bit=$(dd if="$1" count=1 bs=1 skip=4 2>/dev/null | hexdump -e '1/1 "%02x"')
+	local bit=$(dd if="$1" count=2 bs=1 skip=4 2>/dev/null | hexdump -e '2/1 "%02x"')
 	echo $bit$arch
 }
 
 select_test_method()
 {
+	# $1 - 1=disable ELF method
+
 	local f ELF
 
 	TEST=run
+	ELF_ARCH=
 
-	# ash and dash try to execute invalid executables as a script. they interpret binary garbage with possible negative consequences
-	# bash and zsh do not do this
-	if exists bash; then
-		TEST=bash
-	elif exists zsh && [ "$UNAME" != CYGWIN ] ; then
-		TEST=zsh
-	elif [ "$UNAME" != CYGWIN ]; then
-		if exists hexdump && exists dd; then
+	if [ "$UNAME" != CYGWIN ]; then
+		if [ "$1" != 1 ] && exists hexdump && exists dd ; then
 			# macos does not use ELF
 			TEST=elf
 			ELF=
@@ -60,8 +56,13 @@ select_test_method()
 				FIND="busybox find"
 			}
 		fi
+	# ash and dash try to execute invalid executables as a script. they interpret binary garbage with possible negative consequences
+	# bash and zsh do not do this
+	elif exists bash; then
+		TEST=bash
+	elif exists zsh && [ "$UNAME" != CYGWIN ] ; then
+		TEST=zsh
 	fi
-
 }
 
 check_dir()
@@ -143,7 +144,7 @@ if [ ! -d "$BINDIR" ] || ! dir_is_not_empty "$BINDIR" ]; then
 			echo "to compile : make"
 			;;
 		OpenBSD)
-			echo "to compile : make bsd"
+			echo "to compile : install gmake, then 'gmake bsd'"
 			;;
 		CYGWIN*)
 			echo "you need to download release from github or build binaries from source"
@@ -160,7 +161,7 @@ case $UNAME in
 		ARCHLIST="my linux-x86_64 linux-x86 linux-arm64 linux-arm linux-mips64 linux-mipsel64 linux-mipsel linux-mips linux-lexra linux-ppc linux-riscv64"
 		PKTWS=nfqws2
 		;;
-	FreeBSD)
+	FreeBSD|OpenBSD)
 		ARCHLIST="my freebsd-x86_64"
 		PKTWS=dvtws2
 		;;
@@ -173,35 +174,37 @@ case $UNAME in
 		ARCHLIST="my"
 esac
 
-select_test_method
+for no_elf in 0 1; do
+	select_test_method $no_elf
 
-if [ "$1" = "getarch" ]; then
-	for arch in $ARCHLIST
-	do
-		[ -d "$BINDIR/$arch" ] || continue
-		if check_dir $arch; then
-	 		echo $arch
-	 		exit 0
-	 	fi
-	done
-else
-	echo "using arch detect method : $TEST${ELF_ARCH:+ $ELF_ARCH}"
+	if [ "$1" = "getarch" ]; then
+		for arch in $ARCHLIST; do
+			[ -d "$BINDIR/$arch" ] || continue
+			if check_dir $arch; then
+				echo $arch
+				exit 0
+			fi
+		done
+	else
+		echo "using arch detect method : $TEST${ELF_ARCH:+ $ELF_ARCH}"
 
-	for arch in $ARCHLIST
-	do
-		[ -d "$BINDIR/$arch" ] || continue
-		if check_dir $arch; then
-			echo $arch is OK
-			echo installing binaries ...
-			ccp $arch/ip2net ip2net
-			ccp $arch/mdig mdig
-			[ -n "$PKTWS" ] && ccp $arch/$PKTWS nfq2
-	 		exit 0
-		else
-			echo $arch is NOT OK
-		fi
-	done
-	echo no compatible binaries found
-fi
+		for arch in $ARCHLIST; do
+			[ -d "$BINDIR/$arch" ] || continue
+			if check_dir $arch; then
+				echo $arch is OK
+				echo installing binaries ...
+				ccp $arch/ip2net ip2net
+				ccp $arch/mdig mdig
+				[ -n "$PKTWS" ] && ccp $arch/$PKTWS nfq2
+				exit 0
+			else
+				echo $arch is NOT OK
+			fi
+		done
+	fi
+	[ "$TEST" = elf ] || break
+done
+
+echo >&2 no compatible binaries found
 
 exit 1

@@ -362,3 +362,18 @@ v0.9.4.3
 * init.d: clone latest openwrt resolve_lower_devices behavior for hardware offload
 * winws2: --wf-priority
 * winws2: max windivert filter length reduce from 64K to 16K
+
+1.0.8
+
+* nfqws2: disable more syscalls
+* nfqws2: can_drop_root() now checks /proc/self/setgroups
+* install_bin: prefer ELF method to fix arch selection when qemu-user-static is installed
+* nfqws2: use port stripped hostname to discover DPI redirect
+* nfqws2: fix autohostlist behavior with ipcache-hostname
+* nfqws2: copy filter_mark and filter_ssid_neg in templates
+* nfqws2: recalculate L3 lengts for frag_off packets
+* nfqws2: fix checksum edge cases
+* nfqws2: do not allow zero udp checksum
+* nfqws2: warn if not last profile is empty
+* zapret-auto: fix non-working stopif
+* zapret-lib: support ipv6 literals in dissect_url

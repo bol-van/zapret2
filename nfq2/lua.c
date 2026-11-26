@@ -880,6 +880,7 @@ static void lua_desync_ctx_create(lua_State *L)
 		luaL_getmetatable(L, "desync_ctx");
 		lua_setmetatable(L, -2);
 		params.ref_desync_ctx = luaL_ref(params.L, LUA_REGISTRYINDEX);
+		params.desync_ctx_singleton = ctx;
 
 		LUA_STACK_GUARD_LEAVE(L,0)
 	}
@@ -890,6 +891,7 @@ static void lua_desync_ctx_destroy(lua_State *L)
 	{
 		luaL_unref(L, LUA_REGISTRYINDEX, params.ref_desync_ctx);
 		params.ref_desync_ctx = 0;
+		params.desync_ctx_singleton = NULL;
 	}
 }
 
@@ -1704,9 +1706,9 @@ void lua_pushf_ctrack_pos(lua_State *L, const t_ctrack *ctrack, const t_ctrack_p
 		lua_pushf_lint(L,"seq", pos->seq_last);
 		lua_pushf_lint(L,"rseq", pos->seq_last - pos->seq0);
 		lua_pushf_bool(L,"rseq_over_2G", pos->rseq_over_2G);
-		lua_pushf_int(L,"pos", pos->pos - pos->seq0);
-		lua_pushf_int(L,"uppos", pos->uppos - pos->seq0);
-		lua_pushf_int(L,"uppos_prev", pos->uppos_prev - pos->seq0);
+		lua_pushf_lint(L,"pos", pos->pos - pos->seq0);
+		lua_pushf_lint(L,"uppos", pos->uppos - pos->seq0);
+		lua_pushf_lint(L,"uppos_prev", pos->uppos_prev - pos->seq0);
 		lua_pushf_int(L,"winsize", pos->winsize);
 		lua_pushf_int(L,"winsize_calc", pos->winsize_calc);
 		lua_pushf_int(L,"scale", pos->scale);
@@ -2470,7 +2472,24 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 		frag = false;
 	lua_pop(L, 1);
 
-	if (frag) ip6_preserve_next = true; // there's no other source of next. no tcp, no udp, no icmp headers. just raw ip payload
+	if (!ip6_preserve_next)
+	{
+		if (frag)
+			ip6_preserve_next = true; // there's no other source of next. no tcp, no udp, no icmp headers. just raw ip payload
+		else if (last_proto==IPPROTO_NONE)
+		{
+			bool b;
+			const char * const * tbl, * const tbls[] = {"tcp","udp","icmp",NULL};
+			for (b=false,tbl=tbls;*tbl && !b;tbl++)
+			{
+				lua_getfield(L,idx,*tbl);
+				b = lua_type(L,-1)==LUA_TTABLE;
+				lua_pop(L, 1);
+			}
+			// force ip6_preserve_next if no known L4 headers exist
+			ip6_preserve_next = !b;
+		}
+	}
 
 	lua_getfield(L,idx,"ip");
 	l = left;
@@ -2523,6 +2542,16 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 			lpayload = 0;
 		lua_pop(L, 1);
 		l = data-buf;
+
+		if (ip)
+		{
+			ip->ip_len = htons((uint16_t)l);
+			ip4_fix_checksum(ip);
+		}
+		else if (ip6)
+		{
+			ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)(l-sizeof(struct ip6_hdr)));
+		}
 	}
 	else
 	{
@@ -2621,7 +2650,14 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 				}
 				udp->uh_ulen = htons((uint16_t)sz);
 				udp_fix_checksum(udp,l-l3,ip,ip6);
-				if (badsum) udp->uh_sum ^= 1 + (random() % 0xFFFF);
+				if (badsum)
+				{
+					// do not allow zero checksum
+					uint16_t old_sum = udp->uh_sum;
+					do
+						udp->uh_sum = 1 + (random() % 0xFFFF);
+					while(udp->uh_sum==old_sum);
+				}
 			}
 			else if (icmp)
 			{
@@ -2659,12 +2695,12 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 		else if (ip6)
 		{
 			// data points to reconstructed packet's end
-			uint8_t *frag = proto_find_ip6_exthdr(ip6, l, IPPROTO_FRAGMENT);
-			if (frag)
+			struct ip6_frag *frag = (struct ip6_frag*)proto_find_ip6_exthdr(ip6, l, IPPROTO_FRAGMENT);
+			if (frag && (frag->ip6f_offlg & (IP6F_OFF_MASK|IP6F_MORE_FRAG)))
 			{
 				uint16_t plen = ntohs(ip6->ip6_ctlun.ip6_un1.ip6_un1_plen); // without ipv6 base header
-				uint16_t off = ntohs(((struct ip6_frag *)frag)->ip6f_offlg) & 0xFFF8;
-				uint8_t *endfrag = frag + 8;
+				uint16_t off = ntohs(frag->ip6f_offlg & IP6F_OFF_MASK);
+				uint8_t *endfrag = (uint8_t*)(frag + 1);
 				size_t size_unfragmentable = endfrag - (uint8_t*)ip6 - sizeof(struct ip6_hdr);
 
 				if (size_unfragmentable > plen)
@@ -2684,7 +2720,7 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 			else
 				ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)(l-sizeof(struct ip6_hdr)));
 		}
-	}
+	} // frag
 
 	*len = l;
 	LUA_STACK_GUARD_LEAVE(L, 0)
@@ -3072,6 +3108,14 @@ static int luacall_conntrack_feed(lua_State *L)
 		{
 			lua_push_ctrack(L, ctrack, NULL, bReverse);
 			lua_pushboolean(L, !bReverse); // outgoing
+
+			t_lua_desync_context *ctx = params.desync_ctx_singleton;
+			if (!ctx->ctrack)
+			{
+				ctx->ctrack = ctrack;
+				ctx->incoming = bReverse;
+				DLOG("conntrack record created\n");
+			}
 		}
 		else
 			goto err;
@@ -3268,8 +3312,10 @@ static int lua_get_ifaddrs(lua_State *L)
 				lua_rawgeti(L,-1,li);
 				lua_pushf_ipaddr(L, "addr", a->ifa_addr);
 				lua_pushf_ipaddr(L, "netmask", a->ifa_netmask);
-				lua_pushf_ipaddr(L, "broadcast", a->ifa_broadaddr);
-				lua_pushf_ipaddr(L, "dst", a->ifa_dstaddr);
+				if (a->ifa_flags & IFF_BROADCAST)
+					lua_pushf_ipaddr(L, "broadcast", a->ifa_broadaddr);
+				else if (a->ifa_flags & IFF_POINTOPOINT)
+					lua_pushf_ipaddr(L, "dst", a->ifa_dstaddr);
 				lua_pop(L,3);
 			}
 		}
@@ -4442,7 +4488,7 @@ static void lua_init_const(void)
 	DLOG("\nLUA NUMERIC:");
 	for (int i=0;i<sizeof(cuint)/sizeof(*cuint);i++)
 	{
-		lua_pushinteger(params.L, (lua_Integer)cuint[i].v);
+		lua_pushlint(params.L, cuint[i].v);
 		lua_setglobal(params.L, cuint[i].name);
 		DLOG(" %s", cuint[i].name);
 	}

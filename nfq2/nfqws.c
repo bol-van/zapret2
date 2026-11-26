@@ -2393,13 +2393,16 @@ int main(int argc, char **argv)
 			break;
 #ifdef __linux__
 		case IDX_QNUM:
-			params.qnum = atoi(optarg);
-			if (params.qnum < 0 || params.qnum>65535)
+		{
+			int i = atoi(optarg);
+			if (i < 0 || i>65535)
 			{
-				DLOG_ERR("bad qnum\n");
+				DLOG_ERR("bad qnum. must be 0..65535\n");
 				exit_clean(1);
 			}
+			params.qnum = i;
 			break;
+		}
 		case IDX_BIND_FIX4:
 			params.bind_fix4 = true;
 			break;
@@ -2879,6 +2882,7 @@ int main(int argc, char **argv)
 			break;
 		case IDX_FILTER_SSID_NEG:
 			dp->filter_ssid_neg = !optarg || atoi(optarg);
+			dp->b_filter_ssid_neg = true;
 			break;
 #endif
 #ifdef __linux__
@@ -2894,6 +2898,7 @@ int main(int argc, char **argv)
 			else
 				// no mask - use the whole 32-bit value
 				dp->filter_mark_mask=0xFFFFFFFF;
+			dp->b_filter_mark=true;
 			break;
 fmark_err:
 			DLOG_ERR("filter mark or mask format error\n");
@@ -3203,7 +3208,7 @@ fmark_err:
 	if (params.intercept)
 	{
 #ifdef __linux__
-		if (params.qnum < 0)
+		if (params.qnum == 0xFFFFFFFF)
 		{
 			DLOG_ERR("Need queue number (--qnum)\n");
 			exit_clean(1);
@@ -3250,10 +3255,18 @@ fmark_err:
 	{
 		dp = &dpl->dp;
 
-		if (params.server && dp->hostlist_auto)
+		if (dp->hostlist_auto)
 		{
-			DLOG_ERR("autohostlists not supported in server mode\n");
-			exit_clean(1);
+			if (params.server)
+			{
+				DLOG_ERR("autohostlists not supported in server mode\n");
+				exit_clean(1);
+			}
+			if (params.ctrack_disable)
+			{
+				DLOG_ERR("autohostlists not supported without conntrack\n");
+				exit_clean(1);
+			}
 		}
 
 #ifndef __CYGWIN__
@@ -3375,6 +3388,19 @@ fmark_err:
 		}
 	}
 #endif
+
+	bool bWarnEmpty = false;
+	LIST_FOREACH(dpl, &params.desync_profiles, next)
+	{
+		dp = &dpl->dp;
+		// profile 0 and last profile can be empty with no impact
+		if (dp->n && dp->n<desync_profile_count && dp_empty_filter(dp))
+		{
+			bWarnEmpty = true;
+			DLOG_CONDUP("WARNING ! Profile %u (%s) has empty filter. Everything after this profile is unreachable.\n",dp->n,PROFILE_NAME(dp));
+		}
+	}
+	if (bWarnEmpty) DLOG_CONDUP("\n");
 
 	if (bDry)
 	{

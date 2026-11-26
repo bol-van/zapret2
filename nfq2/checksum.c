@@ -7,8 +7,10 @@
 
 static uint16_t from64to16(uint64_t x)
 {
-	uint32_t u = (uint32_t)(uint16_t)x + (uint16_t)(x >> 16) + (uint16_t)(x >> 32) + (uint16_t)(x >> 48);
-	return (uint16_t)u + (uint16_t)(u >> 16);
+	x = (uint64_t)(uint32_t)x + (x>>32);
+	uint32_t u = (uint16_t)x + (x>>16);
+	u = (uint16_t)u + (u>>16);
+	return (uint16_t)u + (u>>16);
 }
 
 // this function preserves data alignment requirements (otherwise it will be damn slow on mips arch)
@@ -97,7 +99,7 @@ static uint16_t do_csum(const uint8_t *buff, size_t len)
 
 #define csum_partial(buff, len) do_csum((const uint8_t*)buff,len)
 
-uint16_t csum_tcpudp_magic(uint32_t saddr, uint32_t daddr, size_t len, uint8_t proto, uint16_t sum)
+static uint16_t csum_tcpudp_magic(uint32_t saddr, uint32_t daddr, size_t len, uint8_t proto, uint16_t sum)
 {
 	return ~from64to16((uint64_t)saddr + daddr + sum + htonl(len + proto));
 }
@@ -112,7 +114,7 @@ void ip4_fix_checksum(struct ip *ip)
 	ip->ip_sum = ip4_compute_csum(ip, ip->ip_hl << 2);
 }
 
-uint16_t csum_ipv6_magic(const void *saddr, const void *daddr, size_t len, uint8_t proto, uint16_t sum)
+static uint16_t csum_ipv6_magic(const void *saddr, const void *daddr, size_t len, uint8_t proto, uint16_t sum)
 {
 	uint64_t a = (uint64_t)sum + htonl(len + proto) +
 				 *(const uint32_t *)saddr + *((const uint32_t *)saddr + 1) + *((const uint32_t *)saddr + 2) + *((const uint32_t *)saddr + 3) +
@@ -142,11 +144,13 @@ void udp4_fix_checksum(struct udphdr *udp, size_t len, const struct in_addr *src
 {
 	udp->uh_sum = 0;
 	udp->uh_sum = csum_tcpudp_magic(src_addr->s_addr, dest_addr->s_addr, len, IPPROTO_UDP, csum_partial(udp, len));
+	if (!udp->uh_sum) udp->uh_sum = 0xFFFF; // RFC 768
 }
 void udp6_fix_checksum(struct udphdr *udp, size_t len, const struct in6_addr *src_addr, const struct in6_addr *dest_addr)
 {
 	udp->uh_sum = 0;
 	udp->uh_sum = csum_ipv6_magic(src_addr, dest_addr, len, IPPROTO_UDP, csum_partial(udp, len));
+	if (!udp->uh_sum) udp->uh_sum = 0xFFFF; // RFC 768
 }
 void udp_fix_checksum(struct udphdr *udp, size_t len, const struct ip *ip, const struct ip6_hdr *ip6hdr)
 {

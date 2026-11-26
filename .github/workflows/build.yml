@@ -387,23 +387,6 @@ jobs:
         with:
           path: zapret2
 
-      - name: Set up MinGW
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{ matrix.arch == 'x86_64' && 'MINGW64' || 'MINGW32' }}
-          install: >-
-            ${{ matrix.arch == 'x86_64' && 'mingw-w64-x86_64-toolchain' || 'mingw-w64-i686-toolchain' }}
-
-      - name: Build ip2net, mdig
-        shell: msys2 {0}
-        run: |
-          export CFLAGS="-DZAPRET_GH_VER=${{ github.ref_name }} -DZAPRET_GH_HASH=${{ github.sha }}"
-          mkdir -p output
-          cd zapret2
-          mingw32-make -C ip2net win
-          mingw32-make -C mdig win
-          cp -a {ip2net/ip2net,mdig/mdig}.exe ../output
-
       - name: Restore psmisc from cache
         id: cache-restore-psmisc
         uses: actions/cache/restore@v4
@@ -414,6 +397,7 @@ jobs:
       - name: Set up Cygwin
         env:
           PACKAGES: ${{ steps.cache-restore-psmisc.outputs.cache-hit != 'true' && 'cygport gettext-devel libiconv-devel libncurses-devel' || null }}
+          MINGW_PKG: ${{ matrix.arch == 'x86_64' && 'mingw64-x86_64-gcc-core' || 'mingw64-i686-gcc-core' }}
         uses: cygwin/cygwin-install-action@v4
         with:
           platform: ${{ matrix.arch }}
@@ -426,17 +410,19 @@ jobs:
             zip
             unzip
             wget
+            ${{ env.MINGW_PKG }}
             ${{ env.PACKAGES }}
 
       - name: Build psmisc
         if: steps.cache-restore-psmisc.outputs.cache-hit != 'true'
         env:
-          URL: https://mirrors.kernel.org/sourceware/cygwin/x86_64/release/psmisc
+          #URL: https://mirrors.kernel.org/sourceware/cygwin/x86_64/release/psmisc/psmisc-23.4-4-src.tar.xz
+          URL: https://mirror.yandex.ru/mirrors/ftp.cygwin.com/x86_64/release/psmisc/psmisc-23.4-4-src.tar.xz
         shell: C:\cygwin\bin\bash.exe -eo pipefail '{0}'
         run: >-
           export MAKEFLAGS=-j$(nproc) &&
           mkdir -p psmisc && cd psmisc &&
-          wget -qO- ${URL} | grep -Po 'href=\"\Kpsmisc-(\d+\.)+\d+.+src\.tar\.xz(?=\")' | xargs -I{} wget -O- ${URL}/{} | tar -xJ &&
+          wget -qO- ${URL} | tar -xJ &&
           cd psmisc-*.src &&
           echo CYGCONF_ARGS+=\" --disable-dependency-tracking --disable-nls\" >> psmisc.cygport &&
           cygport psmisc.cygport prep compile install
@@ -447,6 +433,17 @@ jobs:
         with:
           path: ${{ github.workspace }}/psmisc
           key: psmisc-${{ matrix.arch }}
+
+      - name: Build ip2net, mdig
+        env:
+          CC: ${{ matrix.arch == 'x86_64' && 'x86_64-w64-mingw32-gcc' || 'i686-w64-mingw32-gcc' }}
+        shell: C:\cygwin\bin\bash.exe -eo pipefail '{0}'
+        run: >-
+          mkdir -p output &&
+          cd zapret2 &&
+          make -C ip2net win CC=${CC} &&
+          make -C mdig win CC=${CC} &&
+          cp -a {ip2net/ip2net,mdig/mdig}.exe ../output
 
       - name: Build luajit
         env:

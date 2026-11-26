@@ -21,14 +21,13 @@ VPN. Может использоваться для частичной проз�
 
 If you find this project useful and wish to donate here are crypto wallets :
 
-USDT ERC `0x3d52Ce15B7Be734c53fc9526ECbAB8267b63d66E` 
+USDT ERC, USDT BNB, USDC, ETH `0x3d52Ce15B7Be734c53fc9526ECbAB8267b63d66E`
 
-USDT TRC `TEzAAtn4VhndqEaAyuCM78xh5W2gCjwWEo`
+USDT TRC, TRON `TEzAAtn4VhndqEaAyuCM78xh5W2gCjwWEo`
 
 BTC  `bc1qhqew3mrvp47uk2vevt5sctp7p2x9m7m5kkchve`
 
-ETH  `0x3d52Ce15B7Be734c53fc9526ECbAB8267b63d66E`
-
+LTC  `LS83ERpnQTQKyZRr55e5NrqVKXnMquhQsm`
 
 ## Чем это отличается от zapret1
 

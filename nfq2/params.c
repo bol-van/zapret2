@@ -344,6 +344,23 @@ void dp_init_dynamic(struct desync_profile *dp)
 	LIST_INIT(&dp->filter_ssid);
 #endif
 }
+bool dp_empty_filter(const struct desync_profile *dp)
+{
+	return
+		!dp->b_filter_l3 && !dp->b_filter_l7 &&
+#ifdef __linux__
+		!dp->b_filter_mark &&
+#endif
+#ifdef HAS_FILTER_SSID
+		LIST_EMPTY(&dp->filter_ssid) &&
+#endif
+		LIST_EMPTY(&dp->pf_tcp) &&
+		LIST_EMPTY(&dp->pf_udp) &&
+		LIST_EMPTY(&dp->icf) &&
+		LIST_EMPTY(&dp->ipf) &&
+		PROFILE_HOSTLISTS_EMPTY(dp) &&
+		PROFILE_IPSETS_EMPTY(dp);
+}
 void dp_init(struct desync_profile *dp)
 {
 	dp_init_dynamic(dp);
@@ -425,6 +442,17 @@ bool dp_copy(struct desync_profile *to, const struct desync_profile *from)
 	DP_COPY_SIMPLE(hostlist_auto_udp_out)
 	DP_COPY_SIMPLE(hostlist_auto_udp_in)
 	DP_COPY_SIMPLE(filter_l7)
+#ifdef HAS_FILTER_SSID
+	DP_COPY_SIMPLE(filter_ssid_neg)
+#endif
+#ifdef __linux__
+	if (from->b_filter_mark)
+	{
+		to->filter_mark = from->filter_mark;
+		to->filter_mark_mask = from->filter_mark_mask;
+		to->b_filter_mark = true;
+	}
+#endif
 	if (from->b_filter_l3)
 	{
 		if (to->b_filter_l3)
@@ -578,7 +606,7 @@ void init_params(struct params_s *params)
 
 	params->intercept = true;
 #ifdef __linux__
-	params->qnum = -1;
+	params->qnum = 0xFFFFFFFF;
 #elif defined(BSD)
 	params->port = 0;
 #endif

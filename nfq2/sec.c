@@ -38,10 +38,60 @@ SYS_exec_with_loader,
 #ifdef SYS_osf_execve
 SYS_osf_execve,
 #endif
+#ifdef SYS_unshare
+SYS_unshare,
+#endif
+#ifdef SYS_setns
+SYS_setns,
+#endif
+#ifdef SYS_bpf
+SYS_bpf,
+#endif
+#ifdef SYS_io_uring_setup
+SYS_io_uring_setup,
+#endif
+#ifdef SYS_io_uring_enter
+SYS_io_uring_enter,
+#endif
+#ifdef SYS_io_uring_register
+SYS_io_uring_register,
+#endif
+#ifdef SYS_userfaultfd
+SYS_userfaultfd,
+#endif
+#ifdef SYS_memfd_create
+SYS_memfd_create,
+#endif
+SYS_mount,SYS_umount2,
+#ifdef SYS_oldmount
+SYS_oldumount,
+#endif
+#ifdef SYS_mount_setattr
+SYS_mount_setattr,
+#endif
+#ifdef SYS_move_mount
+SYS_move_mount,
+#endif
+#ifdef SYS_fsmount
+SYS_fsmount,
+#endif
+#ifdef SYS_fsopen
+SYS_fsopen,
+#endif
+#ifdef SYS_fsconfig
+SYS_fsconfig,
+#endif
+#ifdef SYS_fsmount
+SYS_fsmount,
+#endif
+#ifdef SYS_fspick
+SYS_fspick,
+#endif
+SYS_chroot,SYS_pivot_root,
+SYS_fchmod,SYS_fchmodat,
 #ifdef SYS_chmod
 SYS_chmod,
 #endif
-SYS_fchmod,SYS_fchmodat,
 #ifdef SYS_chown
 SYS_chown,
 #endif
@@ -238,19 +288,40 @@ bool dropcaps(void)
 
 #ifndef __CYGWIN__
 
-#ifndef __linux__
+#ifdef __linux__
+
+// user netns check
+static bool is_setgroups_denied(void)
+{
+	char buf[16];
+	int fd = open("/proc/self/setgroups", O_RDONLY);
+	if (fd < 0) return false; // old kernel
+	ssize_t n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n > 0)
+	{
+		buf[n] = 0;
+		if (strncmp(buf, "deny", 4) == 0) return true;
+	}
+	return false;
+}
+
+#else
+
 bool sec_harden(void)
 {
 	// noop
 	return true;
 }
+
 #endif
+
 
 bool can_drop_root(void)
 {
 #ifdef __linux__
 	// has some caps
-	return checkpcap((1ULL<<CAP_SETUID)|(1ULL<<CAP_SETGID));
+	return checkpcap((1ULL<<CAP_SETUID)|(1ULL<<CAP_SETGID)) && !is_setgroups_denied();
 #else
 	// effective root
 	return !geteuid();

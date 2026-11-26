@@ -106,7 +106,8 @@ bool IsHttpReply(const uint8_t *data, size_t len);
 // must be pre-checked by IsHttpReply
 int HttpReplyCode(const uint8_t *data);
 // must be pre-checked by IsHttpReply
-bool HttpReplyLooksLikeDPIRedirect(const uint8_t *data, size_t len, const char *host);
+bool HttpReplyLooksLikeDPIRedirect(const uint8_t *data, size_t len, const char *host, bool host_is_ip);
+
 
 const char *TLSVersionStr(uint16_t tlsver);
 uint16_t TLSRecordDataLen(const uint8_t *data);
